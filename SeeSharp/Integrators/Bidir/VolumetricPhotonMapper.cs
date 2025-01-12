@@ -93,6 +93,7 @@ public class VolumetricPhotonMapper : Integrator {
             }
         }
         surfacePhotonMap.Build();
+        volumePhotonMap.Build();
     }
 
     RgbColor Merge(float radius, SurfacePoint hit, Vector3 outDir, int pathIdx, int vertIdx, float distSqr,

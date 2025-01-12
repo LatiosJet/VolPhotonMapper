@@ -14,7 +14,4 @@ public class HomogeneousVolume {
     public float Transmittance(Vector3 x, Vector3 y) {
         return MathF.Exp(Sigma_t * (x - y).Length());
     }
-
-
-
 }

@@ -4,8 +4,8 @@ namespace SeeSharp.Integrators.Common;
 /// Stores a set of paths consisting of vertices. The capacity is pre-determined. If not all vertices of a
 /// path fit in the cache, they are discared and the next iteration uses a bigger cache.
 /// </summary>
-public class PathCache {
-    PathVertex[] memory;
+public class PathCache<T> {
+    T[] memory;
     int next = 0;
     int[] pathIndices;
     int[] pathLengths;
@@ -16,13 +16,13 @@ public class PathCache {
         pathIndices = new int[numPaths];
         pathLengths = new int[numPaths];
         cumPathLen = new int[numPaths];
-        memory = new PathVertex[numPaths * expectedPathLength];
+        memory = new T[numPaths * expectedPathLength];
     }
 
     /// <returns>
     /// A reference to the vertexIdx'th vertex along the pathIdx'th path
     /// </returns>
-    public ref PathVertex GetPathVertex(int pathIdx, int vertexIdx) {
+    public ref T GetPathVertex(int pathIdx, int vertexIdx) {
         int p = pathIndices[pathIdx];
         return ref memory[p + vertexIdx];
     }
@@ -35,7 +35,7 @@ public class PathCache {
     /// <returns>
     /// A reference to the a vertex identified by its global index in the entire cache
     /// </returns>
-    public ref PathVertex GetVertex(int globalVertexIdx) {
+    public ref T GetVertex(int globalVertexIdx) {
         int idx = Array.BinarySearch(cumPathLen, globalVertexIdx);
         int vertexMemoryIdx;
         if (idx < 0) {
@@ -58,7 +58,7 @@ public class PathCache {
 
     public int Length(int pathIdx) => pathLengths[pathIdx];
 
-    public void Commit(int pathIdx, ReadOnlySpan<PathVertex> vertices) {
+    public void Commit(int pathIdx, ReadOnlySpan<T> vertices) {
         if (vertices.Length > 0) {
             pathIndices[pathIdx] = Interlocked.Add(ref next, vertices.Length) - vertices.Length;
             pathLengths[pathIdx] = vertices.Length;
@@ -78,7 +78,7 @@ public class PathCache {
         next = 0;
         if (overflow) {
             Logger.Warning("Overflow occured in the path cache, consider using a larger initial size.");
-            memory = new PathVertex[memory.Length * 2];
+            memory = new T[memory.Length * 2];
         }
     }
 

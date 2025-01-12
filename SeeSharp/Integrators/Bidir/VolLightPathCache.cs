@@ -5,7 +5,7 @@ using Walk = RandomWalk<LightPathCache.LightPathPayload>;
 /// <summary>
 /// Samples a given number of light paths via random walks through a scene and stores their vertices.
 /// </summary>
-public class LightPathCache {
+public class VolLightPathCache {
     /// <summary>
     /// The number of paths that should be traced in each iteration
     /// </summary>
@@ -24,7 +24,7 @@ public class LightPathCache {
     /// <summary>
     /// The generated light paths in the current iteration
     /// </summary>
-    protected PathCache<PathVertex> PathCache { get; set; }
+    protected PathCache<VolPathVertex> PathCache { get; set; }
 
     /// <summary>
     /// Randomly samples either the background or an emitter from the scene
@@ -125,10 +125,10 @@ public class LightPathCache {
     /// </param>
     public virtual void TraceAllPaths(uint seed, uint iter, LightPathWalk.NextEventPdfCallback nextEventPdfCallback) {
         if (PathCache == null)
-            PathCache = new PathCache<PathVertex>(NumPaths, Math.Min(MaxDepth + 1, 10));
+            PathCache = new PathCache<VolPathVertex>(NumPaths, Math.Min(MaxDepth + 1, 10));
         else if (NumPaths != PathCache.NumPaths) {
             // The size of the path cache needs to change -> simply create a new one
-            PathCache = new PathCache<PathVertex>(NumPaths, Math.Min(MaxDepth + 1, 10));
+            PathCache = new PathCache<VolPathVertex>(NumPaths, Math.Min(MaxDepth + 1, 10));
         } else {
             PathCache.Clear();
         }
@@ -164,7 +164,7 @@ public class LightPathCache {
     /// <param name="vertex">Reference to the vertex</param>
     /// <param name="ancestor">Reference to the vertex's ancestor</param>
     /// <param name="dirToAncestor">Normalized direction from the vertex to the ancestor</param>
-    public delegate void ProcessVertex(in PathVertex vertex, in PathVertex ancestor, Vector3 dirToAncestor);
+    public delegate void ProcessVertex(in VolPathVertex vertex, in VolPathVertex ancestor, Vector3 dirToAncestor);
 
     /// <summary>
     /// Utility function that iterates over all vertices of all light paths, excluding the point on the light itself.
@@ -181,9 +181,9 @@ public class LightPathCache {
         });
     }
 
-    public ref PathVertex this[int vertexIdx] => ref PathCache.GetVertex(vertexIdx);
+    public ref VolPathVertex this[int vertexIdx] => ref PathCache.GetVertex(vertexIdx);
 
-    public ref PathVertex this[int pathIdx, int vertexIdx] => ref PathCache.GetPathVertex(pathIdx, vertexIdx);
+    public ref VolPathVertex this[int pathIdx, int vertexIdx] => ref PathCache.GetPathVertex(pathIdx, vertexIdx);
 
     /// <returns>The length of the pathIdx'th path</returns>
     public int Length(int pathIdx) => PathCache.Length(pathIdx);
@@ -256,9 +256,9 @@ public class LightPathCache {
         /// <summary>
         /// The cache storing the generated path
         /// </summary>
-        public readonly PathCache<PathVertex> Cache;
+        public readonly PathCache<VolPathVertex> Cache;
 
-        ThreadLocal<PathBuffer<PathVertex>> threadBuffers = new(() => new(16));
+        ThreadLocal<PathBuffer<VolPathVertex>> threadBuffers = new(() => new(16));
 
         /// <summary>
         /// Computes the next event sampling pdf
@@ -276,7 +276,7 @@ public class LightPathCache {
         /// </summary>
         /// <param name="cache">The cache to store the path in</param>
         /// <param name="nextEventPdf">Callback that computes the next event sampling PDF once the first two vertices are known</param>
-        public LightPathWalk(PathCache<PathVertex> cache, NextEventPdfCallback nextEventPdf) {
+        public LightPathWalk(PathCache<VolPathVertex> cache, NextEventPdfCallback nextEventPdf) {
             Cache = cache;
             ComputeNextEventPdf = nextEventPdf;
         }
@@ -285,7 +285,7 @@ public class LightPathCache {
             walk.Payload.nextReversePdf = 0.0f;
             walk.Payload.maxRoughness = 0.0f;
 
-            threadBuffers.Value.Add(new PathVertex {
+            threadBuffers.Value.Add(new VolPathVertex {
                 Point = emitterSample.Point,
                 PathId = walk.Payload.PathIdx,
                 FromBackground = false,
@@ -299,7 +299,7 @@ public class LightPathCache {
             walk.Payload.nextReversePdf = 0.0f;
             walk.Payload.FirstPoint = new SurfacePoint { Position = ray.Origin };
 
-            threadBuffers.Value.Add(new PathVertex {
+            threadBuffers.Value.Add(new VolPathVertex {
                 Point = walk.Payload.FirstPoint,
                 PathId = walk.Payload.PathIdx,
                 FromBackground = true,
@@ -318,7 +318,7 @@ public class LightPathCache {
             if (depth == 2 && ComputeNextEventPdf != null)
                 pdfNextEventAncestor = ComputeNextEventPdf(walk.Payload.FirstPoint, walk.Payload.SecondPoint, -shader.Context.OutDirWorld);
 
-            threadBuffers.Value.Add(new PathVertex {
+            threadBuffers.Value.Add(new VolPathVertex {
                 Point = shader.Point,
                 PdfFromAncestor = pdfFromAncestor,
                 PdfReverseAncestor = walk.Payload.nextReversePdf,
