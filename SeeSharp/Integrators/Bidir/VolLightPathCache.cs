@@ -1,6 +1,7 @@
 ﻿namespace SeeSharp.Integrators.Bidir;
 
-using Walk = RandomWalk<LightPathCache.LightPathPayload>;
+using SeeSharp.Shading.Volumes;
+using Walk = VolRandomWalk<LightPathCache.LightPathPayload>;
 
 /// <summary>
 /// Samples a given number of light paths via random walks through a scene and stores their vertices.
@@ -320,6 +321,36 @@ public class VolLightPathCache {
 
             threadBuffers.Value.Add(new VolPathVertex {
                 SurPoint = shader.Point,
+                PdfFromAncestor = pdfFromAncestor,
+                PdfReverseAncestor = walk.Payload.nextReversePdf,
+                PathId = walk.Payload.PathIdx,
+                Weight = throughput,
+                Depth = (byte)depth,
+                PdfNextEventAncestor = pdfNextEventAncestor,
+                MaximumRoughness = MathF.Max(roughness, walk.Payload.maxRoughness),
+                FromBackground = walk.Payload.FromBackground,
+            });
+            return RgbColor.Black;
+        }
+
+        public override RgbColor OnVolumeHit(ref Walk walk, Vector3 position, HomogeneousVolume volume, float pdfFromAncestor,
+                                    RgbColor throughput, int depth, float toAncestorJacobian) {
+            float roughness = 0.0f; //Because we take the max later
+
+            //if (depth == 1) walk.Payload.SecondPoint = shader.Point;
+
+            // The next event pdf is computed once the path has three vertices
+            float pdfNextEventAncestor = 0.0f;
+            //if (depth == 2 && ComputeNextEventPdf != null)
+            //    pdfNextEventAncestor = ComputeNextEventPdf(walk.Payload.FirstPoint, walk.Payload.SecondPoint, -shader.Context.OutDirWorld);
+
+            SurfacePoint surPoint = new() {
+                Position = position
+            };
+
+            threadBuffers.Value.Add(new VolPathVertex {
+                SurPoint = surPoint,
+                Volume = volume,
                 PdfFromAncestor = pdfFromAncestor,
                 PdfReverseAncestor = walk.Payload.nextReversePdf,
                 PathId = walk.Payload.PathIdx,
