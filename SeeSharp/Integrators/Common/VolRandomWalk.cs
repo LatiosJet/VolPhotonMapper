@@ -1,4 +1,5 @@
-﻿using SeeSharp.Shading.Volumes;
+﻿using SeeSharp.Shading.Emitters;
+using SeeSharp.Shading.Volumes;
 using System.ComponentModel.DataAnnotations;
 using System.Data;
 
@@ -82,7 +83,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
         Payload = payload;
         Modifier?.OnStartCamera(ref this, cameraRay, filmPosition);
 
-        return ContinueWalk(cameraRay.Ray, cameraRay.Point, cameraRay.PdfRay, cameraRay.Weight, 1, 1);
+        return ContinueWalk(cameraRay.Ray, cameraRay.Point, cameraRay.PdfRay, cameraRay.Weight, 1, 1, scene.GlobalVolume, false);
     }
 
     public RgbColor StartFromEmitter(EmitterSample emitterSample, RgbColor initialWeight, PayloadType payload) {
@@ -91,67 +92,14 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
         Modifier?.OnStartEmitter(ref this, emitterSample, initialWeight);
 
         Ray ray = Raytracer.SpawnRay(emitterSample.Point, emitterSample.Direction);
-        return ContinueWalk(ray, emitterSample.Point, emitterSample.Pdf, initialWeight, 1, 1);
+        return ContinueWalk(ray, emitterSample.Point, emitterSample.Pdf, initialWeight, 1, 1, scene.GlobalVolume, false);
     }
-
     public RgbColor StartFromBackground(Ray ray, RgbColor initialWeight, float pdf, PayloadType payload) {
         isOnLightSubpath = true;
         Payload = payload;
         Modifier?.OnStartBackground(ref this, ray, initialWeight, pdf);
 
-        // Find the first actual hitpoint on scene geometry
-        bool notHitGeometry = true;
-        Hit hit;
-        do {
-            hit = scene.Raytracer.Trace(ray);
-            if (!hit) {
-                var contrib = Modifier?.OnInvalidHit(ref this, ray, pdf, initialWeight, 1, 1) ?? RgbColor.Black;
-                Modifier?.OnTerminate(ref this);
-                return contrib;
-            }
-            DistanceSample distSample = scene.GlobalVolume.SampleDistance(rng.NextFloat());
-            if (hit.Distance > distSample.distance) {
-                //Volume hit
-                //Call OnVolumeHit and shit
-            }
-            else {
-                //Adjust
-                notHitGeometry = false;
-            }
-        } while (notHitGeometry);
-
-
-
-        SurfaceShader shader = new(hit, -ray.Direction, isOnLightSubpath);
-
-        // Sample the next direction (required to know the reverse pdf)
-        //  = SampleNextDirection(shader, initialWeight, 1);
-        var dirSample = Modifier?.SampleNextDirection(ref this, shader, initialWeight, 1, 1)
-            ?? SampleBsdf(shader);
-        ApproxThroughput *= dirSample.ApproxReflectance;
-
-        // Both pdfs have unit sr-1
-        float pdfFromAncestor = pdf;
-        float pdfToAncestor = dirSample.PdfReverse;
-
-        RgbColor estimate = Modifier?.OnHit(ref this, shader, pdfFromAncestor, initialWeight, 1, 1, 1.0f) ?? RgbColor.Black;
-        Modifier?.OnContinue(ref this, pdfToAncestor, 1, 1);
-
-        // Terminate if the maximum depth has been reached
-        if (maxDepth <= 1) {
-            Modifier?.OnTerminate(ref this);
-            return estimate;
-        }
-
-        // Terminate absorbed paths and invalid samples
-        if (dirSample.PdfForward == 0 || dirSample.Weight == RgbColor.Black) {
-            Modifier?.OnTerminate(ref this);
-            return estimate;
-        }
-
-        // Continue the path with the next ray
-        ray = Raytracer.SpawnRay(hit, dirSample.Direction);
-        return estimate + ContinueWalk(ray, hit, dirSample.PdfForward, initialWeight * dirSample.Weight, 2);
+        return ContinueWalk(ray, new SurfacePoint() {Position =  ray.Origin}, pdf, initialWeight, 1, 1, scene.GlobalVolume, true);
     }
 
     public DirectionSample SampleBsdf(in SurfaceShader shader) {
@@ -172,7 +120,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
             return 1.0f;
     }
 
-    RgbColor ContinueWalk(Ray ray, SurfacePoint previousPoint, float pdfDirection, RgbColor prefixWeight, int depth, int surfaceDepth, HomogeneousVolume volume) {
+    RgbColor ContinueWalk(Ray ray, SurfacePoint previousPoint, float pdfDirection, RgbColor prefixWeight, int depth, int surfaceDepth, HomogeneousVolume volume, bool hitVolume) {
         RgbColor estimate = RgbColor.Black;
         while (depth < maxDepth) {
             var hit = scene.Raytracer.Trace(ray);
@@ -185,7 +133,9 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
             if (hit.Distance > distSample.distance) {
                 float pdfFromAncestor = pdfDirection * distSample.pdf;
                 Vector3 newPosition = ray.Direction * distSample.distance;
-                estimate += Modifier?.OnVolumeHit(ref this, newPosition, volume, pdfFromAncestor, prefixWeight, depth, surfaceDepth, 1.0f) ?? RgbColor.Black; //Jacobian is 1.0 because no conversion should happen
+
+                float jacobian = hitVolume ? 1.0f : SampleWarp.SurfaceAreaToSolidAngle(hit, previousPoint);
+                estimate += Modifier?.OnVolumeHit(ref this, newPosition, volume, pdfFromAncestor, prefixWeight, depth, surfaceDepth, jacobian) ?? RgbColor.Black; //Jacobian is 1.0 because no conversion should happen
 
                 // Don't sample continuations if we are going to terminate anyway
                 if (depth + 1 >= maxDepth)
@@ -199,7 +149,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
 
                 var dirSample = volume.SampleDirection(Vector3.Normalize(previousPoint.Position - newPosition), rng.NextFloat2D());
                 ApproxThroughput *= dirSample.weight / survivalProb;
-                float pdfToAncestor = dirSample.reversePdf;
+                float pdfToAncestor = dirSample.reversePdf * jacobian;
 
                 Modifier?.OnContinue(ref this, pdfToAncestor, depth, surfaceDepth);
 
@@ -207,6 +157,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                     break;
 
                 // Continue the path with the next ray
+                hitVolume = true;
                 prefixWeight *= dirSample.weight * volume.Transmittance(newPosition, previousPoint.Position) / survivalProb;
                 depth++;
                 pdfDirection = dirSample.pdf;
@@ -223,7 +174,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                 // Avoid NaNs in that case by terminating early
                 if (pdfFromAncestor == 0) break;
 
-                float jacobian = SampleWarp.SurfaceAreaToSolidAngle(hit, previousPoint);
+                float jacobian = hitVolume ? 1.0f : SampleWarp.SurfaceAreaToSolidAngle(hit, previousPoint);
                 estimate += Modifier?.OnHit(ref this, shader, pdfFromAncestor, prefixWeight, depth, surfaceDepth, jacobian) ?? RgbColor.Black;
 
                 // Don't sample continuations if we are going to terminate anyway
@@ -240,7 +191,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                 // var (pdfNext, pdfReverse, weight, direction) = SampleNextDirection(shader, prefixWeight, depth);
                 var dirSample = Modifier?.SampleNextDirection(ref this, shader, prefixWeight, depth, surfaceDepth) ?? SampleBsdf(shader);
                 ApproxThroughput *= dirSample.ApproxReflectance / survivalProb;
-                float pdfToAncestor = dirSample.PdfReverse * SampleWarp.SurfaceAreaToSolidAngle(hit, previousPoint);
+                float pdfToAncestor = dirSample.PdfReverse * jacobian;
 
                 Modifier?.OnContinue(ref this, pdfToAncestor, depth, surfaceDepth);
 
@@ -248,6 +199,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                     break;
 
                 // Continue the path with the next ray
+                hitVolume = false;
                 prefixWeight *= dirSample.Weight * volume.Transmittance(previousPoint.Position, hit.Position) / survivalProb / volume.DistanceGreaterProb(hit.Distance);
                 depth++;
                 surfaceDepth++;
