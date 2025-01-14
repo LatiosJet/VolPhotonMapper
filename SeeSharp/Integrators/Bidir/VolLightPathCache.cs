@@ -175,7 +175,7 @@ public class VolLightPathCache {
             for (int i = 1; i < PathCache.Length(pathIdx); ++i) {
                 var vertex = PathCache.GetPathVertex(pathIdx, i);
                 var ancestor = PathCache.GetPathVertex(pathIdx, i - 1);
-                var dirToAncestor = Vector3.Normalize(ancestor.Point.Position - vertex.Point.Position);
+                var dirToAncestor = Vector3.Normalize(ancestor.SurPoint.Position - vertex.SurPoint.Position);
                 func(vertex, ancestor, dirToAncestor);
             }
         });
@@ -286,7 +286,7 @@ public class VolLightPathCache {
             walk.Payload.maxRoughness = 0.0f;
 
             threadBuffers.Value.Add(new VolPathVertex {
-                Point = emitterSample.Point,
+                SurPoint = emitterSample.Point,
                 PathId = walk.Payload.PathIdx,
                 FromBackground = false,
                 Depth = 0,
@@ -300,7 +300,7 @@ public class VolLightPathCache {
             walk.Payload.FirstPoint = new SurfacePoint { Position = ray.Origin };
 
             threadBuffers.Value.Add(new VolPathVertex {
-                Point = walk.Payload.FirstPoint,
+                SurPoint = walk.Payload.FirstPoint,
                 PathId = walk.Payload.PathIdx,
                 FromBackground = true,
                 Depth = 0,
@@ -319,7 +319,7 @@ public class VolLightPathCache {
                 pdfNextEventAncestor = ComputeNextEventPdf(walk.Payload.FirstPoint, walk.Payload.SecondPoint, -shader.Context.OutDirWorld);
 
             threadBuffers.Value.Add(new VolPathVertex {
-                Point = shader.Point,
+                SurPoint = shader.Point,
                 PdfFromAncestor = pdfFromAncestor,
                 PdfReverseAncestor = walk.Payload.nextReversePdf,
                 PathId = walk.Payload.PathIdx,

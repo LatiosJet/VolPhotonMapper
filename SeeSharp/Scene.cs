@@ -1,3 +1,4 @@
+using SeeSharp.Shading.Volumes;
 using System.Collections.Frozen;
 
 namespace SeeSharp;
@@ -56,6 +57,14 @@ public class Scene : IDisposable {
     /// Defines radiance from rays that leave the scene. Must be given if no emitters are present.
     /// </summary>
     public Background Background;
+
+    /// <summary>
+    /// Defines the optical medium spanning the entire scene, unless overwritten by interface geometry.
+    /// </summary>
+    public HomogeneousVolume GlobalVolume = new() { 
+        SigmaA = new RgbColor (-0.1f * MathF.Log(0.5f)), 
+        SigmaS = new RgbColor(-0.1f * MathF.Log(0.5f))
+    }; //TODO: reading mechanism? Also: this should be thick gray smoke
 
     /// <summary>
     /// Center of the geometry in the scene. Computed by <see cref="Prepare"/>

@@ -1,3 +1,6 @@
+using SeeSharp.Shading.Volumes;
+using System.Net.Http.Headers;
+
 namespace SeeSharp.Integrators.Common;
 
 /// <summary>
@@ -8,8 +11,8 @@ public struct VolPathVertex {
     /// The surface intersection. If this is the first vertex of a background path, this point is not actually
     /// on a surface but somewhere in free space outside the scene.
     /// </summary>
-    public SurfacePoint? SurPoint;
-    public VolumePoint? VolPoint;
+    public SurfacePoint SurPoint;
+    public HomogeneousVolume? Volume;
 
     /// <summary>
     /// Surface area pdf to sample this vertex from the previous one, i.e., the actual density this vertex
@@ -48,5 +51,15 @@ public struct VolPathVertex {
     /// </summary>
     public bool FromBackground;
 
-    public bool isVolVertex() => VolPoint != null;
+    public VolPathVertex(SurfacePoint p) {
+        SurPoint = p;
+        Volume = null;
+    }
+
+    public VolPathVertex(HomogeneousVolume volume, Vector3 position) {
+        SurPoint = new() { Position = position };
+        Volume = volume;
+    }
+
+    public bool isVolVertex() => Volume != null;
 }
