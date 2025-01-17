@@ -3,9 +3,20 @@
 namespace SeeSharp.Shading.Volumes;
 
 public record struct DistanceSample {
+    /// <summary>
+    /// Sampled distance
+    /// </summary>
     public float distance;
+
+    /// <summary>
+    /// Weight assigned to the sample. Includes transmittance and pdf.
+    /// </summary>
+    public RgbColor weight;
+
+    /// <summary>
+    /// Pdf of sampling this distance. In m^-1
+    /// </summary>
     public float pdf;
-    public float greaterThanProb;
 }
 
 public record struct DirectionSample {
@@ -97,11 +108,10 @@ public struct HomogeneousVolume {
 
         float distance = -MathF.Log(1-primarySample)/SigmaTHarmonicMean;
         float pdf = DistancePdf(distance);
-        float greaterThanProb = DistanceGreaterProb(distance);
         return new DistanceSample() {
             distance = distance,
-            pdf = pdf,
-            greaterThanProb = greaterThanProb
+            weight = Transmittance(distance),
+            pdf = pdf
         };
     }
 
@@ -116,7 +126,7 @@ public struct HomogeneousVolume {
         float pdf = DirectionPdf(inDirection, dirSample.Direction);
         return new() {
             direction = dirSample.Direction,
-            weight = PhaseFunction(inDirection, dirSample.Direction)/pdf,
+            weight = PhaseFunction(inDirection, dirSample.Direction) / pdf,
             pdf = pdf,
             reversePdf = DirectionPdf(dirSample.Direction, inDirection),
         };
@@ -131,7 +141,27 @@ public struct HomogeneousVolume {
     public readonly RgbColor EmittedRadiance(Vector3 position, Vector3 outDirection) => EmissionRadiance * SigmaA;
 
     /// <summary>
-    /// Factory method that returns a medium completely transparent. Always test isVacuum() before using other functions.
+    /// Accumulated emitted radiance integrated over a line segment of length distance. Assumes the emitted radiance is uniform everywhere
+    /// </summary>
+    /// <param name="position"></param>
+    /// <param name="outDirection"></param>
+    /// <param name="distance"></param>
+    /// <returns></returns>
+    public readonly RgbColor AccumulatedEmittedRadiance(Vector3 position, Vector3 outDirection, float distance) {
+        return EmittedRadiance(position, outDirection) / SigmaT * (RgbColor.White - Transmittance(distance));
+    }
+    /// <summary>
+    /// Converts incoming irradiance in direction inDirection to outgoing radiance in direction outDirection.
+    /// </summary>
+    /// <param name="inRadiance">The incoming radiance</param>
+    /// <param name="position">Position in the volume the in-scattering event happened</param>
+    /// <param name="inDirection">The incoming direction (vector leaves the point)</param>
+    /// <param name="outDirection">The outgoing direction (vector leaves the point)</param>
+    /// <returns></returns>
+    public readonly RgbColor InScatteredRadiance(RgbColor inRadiance, Vector3 position, Vector3 inDirection, Vector3 outDirection) => SigmaS * PhaseFunction(inDirection, outDirection);
+
+    /// <summary>
+    /// Factory method that returns a medium completely transparent.
     /// </summary>
     /// <returns>Whether SigmaT is 0.0</returns>
     public static HomogeneousVolume Vacuum() {

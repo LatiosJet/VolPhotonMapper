@@ -99,7 +99,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
         Payload = payload;
         Modifier?.OnStartBackground(ref this, ray, initialWeight, pdf);
 
-        return ContinueWalk(ray, new SurfacePoint() {Position =  ray.Origin}, pdf, initialWeight, 1, 1, scene.GlobalVolume, true);
+        return ContinueWalk(ray, new SurfacePoint() {Position =  ray.Origin}, pdf, initialWeight, 1, 0, scene.GlobalVolume, true);
     }
 
     public DirectionSample SampleBsdf(in SurfaceShader shader) {
@@ -120,7 +120,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
             return 1.0f;
     }
 
-    RgbColor ContinueWalk(Ray ray, SurfacePoint previousPoint, float pdfDirection, RgbColor prefixWeight, int depth, int surfaceDepth, HomogeneousVolume volume, bool hitVolume) {
+    RgbColor ContinueWalk(Ray ray, SurfacePoint previousPoint, float pdfDirection, RgbColor prefixWeight, int depth, int surfaceDepth, HomogeneousVolume volume, bool previouslyHitVolume) {
         RgbColor estimate = RgbColor.Black;
         while (depth < maxDepth) {
             var hit = scene.Raytracer.Trace(ray);
@@ -132,10 +132,10 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
             DistanceSample distSample = volume.SampleDistance(rng.NextFloat());
             if (hit.Distance > distSample.distance) {
                 float pdfFromAncestor = pdfDirection * distSample.pdf;
-                Vector3 newPosition = ray.Direction * distSample.distance;
+                Vector3 newPosition = ray.ComputePoint(distSample.distance);
 
-                float jacobian = hitVolume ? 1.0f : SampleWarp.SurfaceAreaToSolidAngle(hit, previousPoint);
-                estimate += Modifier?.OnVolumeHit(ref this, newPosition, volume, pdfFromAncestor, prefixWeight, depth, surfaceDepth, jacobian) ?? RgbColor.Black; //Jacobian is 1.0 because no conversion should happen
+                float jacobian = previouslyHitVolume ? 1.0f : SampleWarp.SurfaceAreaToSolidAngle(hit, previousPoint);
+                estimate += Modifier?.OnVolumeHit(ref this, newPosition, volume, pdfFromAncestor, prefixWeight, depth, surfaceDepth, jacobian) ?? RgbColor.Black;
 
                 // Don't sample continuations if we are going to terminate anyway
                 if (depth + 1 >= maxDepth)
@@ -148,7 +148,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                     break;
 
                 var dirSample = volume.SampleDirection(Vector3.Normalize(previousPoint.Position - newPosition), rng.NextFloat2D());
-                ApproxThroughput *= dirSample.weight / survivalProb;
+                ApproxThroughput *= dirSample.weight * distSample.weight / survivalProb;
                 float pdfToAncestor = dirSample.reversePdf * jacobian;
 
                 Modifier?.OnContinue(ref this, pdfToAncestor, depth, surfaceDepth);
@@ -157,24 +157,29 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                     break;
 
                 // Continue the path with the next ray
-                hitVolume = true;
-                prefixWeight *= dirSample.weight * volume.Transmittance(newPosition, previousPoint.Position) / survivalProb;
+                previouslyHitVolume = true;
+                prefixWeight *= dirSample.weight * distSample.weight / survivalProb;
                 depth++;
                 pdfDirection = dirSample.pdf;
                 previousPoint = new() { Position = newPosition}; //There may be some issues with this
-                ray = Raytracer.SpawnRay(hit, dirSample.direction);
+                ray = new Ray() {
+                    Direction = dirSample.direction,
+                    Origin = newPosition,
+                    MinDistance = 0
+                };
 
             } else {
                 SurfaceShader shader = new(hit, -ray.Direction, isOnLightSubpath);
 
                 // Convert the PDF of the previous hemispherical sample to surface area
-                float pdfFromAncestor = pdfDirection * SampleWarp.SurfaceAreaToSolidAngle(previousPoint, hit);
-
+                float pdfFromAncestor = pdfDirection * volume.DistanceGreaterProb(hit.Distance) * SampleWarp.SurfaceAreaToSolidAngle(previousPoint, hit); //Maybe incorrect for the first iteration? I don't know...
+                RgbColor distanceWeight = volume.Transmittance(hit.Distance) / volume.DistanceGreaterProb(hit.Distance);
+                
                 // Geometry term might be zero due to, e.g., shading normal issues
                 // Avoid NaNs in that case by terminating early
                 if (pdfFromAncestor == 0) break;
 
-                float jacobian = hitVolume ? 1.0f : SampleWarp.SurfaceAreaToSolidAngle(hit, previousPoint);
+                float jacobian = previouslyHitVolume ? 1.0f : SampleWarp.SurfaceAreaToSolidAngle(hit, previousPoint);
                 estimate += Modifier?.OnHit(ref this, shader, pdfFromAncestor, prefixWeight, depth, surfaceDepth, jacobian) ?? RgbColor.Black;
 
                 // Don't sample continuations if we are going to terminate anyway
@@ -190,7 +195,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                 // Sample the next direction and convert the reverse pdf
                 // var (pdfNext, pdfReverse, weight, direction) = SampleNextDirection(shader, prefixWeight, depth);
                 var dirSample = Modifier?.SampleNextDirection(ref this, shader, prefixWeight, depth, surfaceDepth) ?? SampleBsdf(shader);
-                ApproxThroughput *= dirSample.ApproxReflectance / survivalProb;
+                ApproxThroughput *= dirSample.ApproxReflectance * distanceWeight / survivalProb;
                 float pdfToAncestor = dirSample.PdfReverse * jacobian;
 
                 Modifier?.OnContinue(ref this, pdfToAncestor, depth, surfaceDepth);
@@ -199,8 +204,8 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                     break;
 
                 // Continue the path with the next ray
-                hitVolume = false;
-                prefixWeight *= dirSample.Weight * volume.Transmittance(previousPoint.Position, hit.Position) / survivalProb / volume.DistanceGreaterProb(hit.Distance);
+                previouslyHitVolume = false;
+                prefixWeight *= dirSample.Weight * distanceWeight / survivalProb;
                 depth++;
                 surfaceDepth++;
                 pdfDirection = dirSample.PdfForward;

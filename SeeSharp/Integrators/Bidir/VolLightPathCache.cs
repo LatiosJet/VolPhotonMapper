@@ -1,7 +1,7 @@
 ﻿namespace SeeSharp.Integrators.Bidir;
 
 using SeeSharp.Shading.Volumes;
-using Walk = VolRandomWalk<LightPathCache.LightPathPayload>;
+using Walk = VolRandomWalk<VolLightPathCache.LightPathPayload>;
 
 /// <summary>
 /// Samples a given number of light paths via random walks through a scene and stores their vertices.
@@ -310,13 +310,13 @@ public class VolLightPathCache {
         }
 
         public override RgbColor OnHit(ref Walk walk, in SurfaceShader shader, float pdfFromAncestor,
-                                    RgbColor throughput, int depth, float toAncestorJacobian) {
+                                    RgbColor throughput, int depth, int surfaceDepth, float toAncestorJacobian) {
             float roughness = shader.GetRoughness();
-            if (depth == 1) walk.Payload.SecondPoint = shader.Point;
+            if (depth == 1) walk.Payload.SecondPoint = shader.Point; //surfaceDepth?
 
             // The next event pdf is computed once the path has three vertices
             float pdfNextEventAncestor = 0.0f;
-            if (depth == 2 && ComputeNextEventPdf != null)
+            if (depth == 2 && ComputeNextEventPdf != null) //surfaceDepth?
                 pdfNextEventAncestor = ComputeNextEventPdf(walk.Payload.FirstPoint, walk.Payload.SecondPoint, -shader.Context.OutDirWorld);
 
             threadBuffers.Value.Add(new VolPathVertex {
@@ -334,7 +334,7 @@ public class VolLightPathCache {
         }
 
         public override RgbColor OnVolumeHit(ref Walk walk, Vector3 position, HomogeneousVolume volume, float pdfFromAncestor,
-                                    RgbColor throughput, int depth, float toAncestorJacobian) {
+                                    RgbColor throughput, int depth, int surfaceDepth, float toAncestorJacobian) {
             float roughness = 0.0f; //Because we take the max later
 
             //if (depth == 1) walk.Payload.SecondPoint = shader.Point;
@@ -363,7 +363,7 @@ public class VolLightPathCache {
             return RgbColor.Black;
         }
 
-        public override void OnContinue(ref Walk walk, float pdfToAncestor, int depth) {
+        public override void OnContinue(ref Walk walk, float pdfToAncestor, int depth, int surfaceDepth) {
             walk.Payload.nextReversePdf = pdfToAncestor;
         }
 

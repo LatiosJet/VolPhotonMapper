@@ -61,9 +61,10 @@ public class Scene : IDisposable {
     /// <summary>
     /// Defines the optical medium spanning the entire scene, unless overwritten by interface geometry.
     /// </summary>
-    public HomogeneousVolume GlobalVolume = new() { 
-        SigmaA = new RgbColor (-0.1f * MathF.Log(0.5f)), 
-        SigmaS = new RgbColor(-0.1f * MathF.Log(0.5f))
+    public HomogeneousVolume GlobalVolume = new() {
+        SigmaA = new RgbColor(-0.1f * MathF.Log(0.5f)),
+        SigmaS = new RgbColor(-0.1f * MathF.Log(0.5f)),
+        EmissionRadiance = RgbColor.Black
     }; //TODO: reading mechanism? Also: this should be thick gray smoke
 
     /// <summary>
