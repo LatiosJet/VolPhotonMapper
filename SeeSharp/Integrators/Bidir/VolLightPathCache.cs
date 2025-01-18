@@ -1,5 +1,6 @@
 ﻿namespace SeeSharp.Integrators.Bidir;
 
+using SeeSharp.Experiments;
 using SeeSharp.Shading.Volumes;
 using Walk = VolRandomWalk<VolLightPathCache.LightPathPayload>;
 
@@ -54,10 +55,10 @@ public class VolLightPathCache {
     }
 
     /// <summary>
-    /// Probability of selecting the background instead of a surface emitter
+    /// Probability of selecting the background instead of a surface emitter. In case of a non-vacuum global medium this is set to 0.
     /// </summary>
     public virtual float BackgroundProbability
-    => Scene.Background != null ? 1 / (1.0f + Scene.Emitters.Count) : 0;
+    => Scene.Background != null && Scene.GlobalVolume.IsVacuum() ? 1.0f / (1.0f + Scene.Emitters.Count) : 0.0f;
 
     /// <summary>
     /// Samples a ray from an emitter in the scene
@@ -286,8 +287,7 @@ public class VolLightPathCache {
             walk.Payload.nextReversePdf = 0.0f;
             walk.Payload.maxRoughness = 0.0f;
 
-            threadBuffers.Value.Add(new VolPathVertex {
-                SurPoint = emitterSample.Point,
+            threadBuffers.Value.Add(new VolPathVertex(emitterSample.Point) {
                 PathId = walk.Payload.PathIdx,
                 FromBackground = false,
                 Depth = 0,
@@ -296,11 +296,11 @@ public class VolLightPathCache {
             walk.Payload.FromBackground = false;
         }
 
-        public override void OnStartBackground(ref Walk walk, Ray ray, RgbColor initialWeight, float pdf) {
+        public override void OnStartBackground(ref Walk walk, Ray ray, RgbColor initialWeight, float pdf, HomogeneousVolume volume) {
             walk.Payload.nextReversePdf = 0.0f;
             walk.Payload.FirstPoint = new SurfacePoint { Position = ray.Origin };
 
-            threadBuffers.Value.Add(new VolPathVertex {
+            threadBuffers.Value.Add(new VolPathVertex(volume, ray.Origin) {
                 SurPoint = walk.Payload.FirstPoint,
                 PathId = walk.Payload.PathIdx,
                 FromBackground = true,
@@ -319,8 +319,7 @@ public class VolLightPathCache {
             if (depth == 2 && ComputeNextEventPdf != null) //surfaceDepth?
                 pdfNextEventAncestor = ComputeNextEventPdf(walk.Payload.FirstPoint, walk.Payload.SecondPoint, -shader.Context.OutDirWorld);
 
-            threadBuffers.Value.Add(new VolPathVertex {
-                SurPoint = shader.Point,
+            threadBuffers.Value.Add(new VolPathVertex(shader.Point) {
                 PdfFromAncestor = pdfFromAncestor,
                 PdfReverseAncestor = walk.Payload.nextReversePdf,
                 PathId = walk.Payload.PathIdx,
@@ -344,13 +343,8 @@ public class VolLightPathCache {
             //if (depth == 2 && ComputeNextEventPdf != null)
             //    pdfNextEventAncestor = ComputeNextEventPdf(walk.Payload.FirstPoint, walk.Payload.SecondPoint, -shader.Context.OutDirWorld);
 
-            SurfacePoint surPoint = new() {
-                Position = position
-            };
 
-            threadBuffers.Value.Add(new VolPathVertex {
-                SurPoint = surPoint,
-                Volume = volume,
+            threadBuffers.Value.Add(new VolPathVertex(volume, position) {
                 PdfFromAncestor = pdfFromAncestor,
                 PdfReverseAncestor = walk.Payload.nextReversePdf,
                 PathId = walk.Payload.PathIdx,
@@ -363,8 +357,9 @@ public class VolLightPathCache {
             return RgbColor.Black;
         }
 
-        public override void OnContinue(ref Walk walk, float pdfToAncestor, int depth, int surfaceDepth) {
+        public override RgbColor OnContinue(ref Walk walk, Vector3 position, Vector3 outDirection, float pdfToAncestor, RgbColor throughput, HomogeneousVolume volume, int depth, int surfaceDepth, bool hitVolume) {
             walk.Payload.nextReversePdf = pdfToAncestor;
+            return hitVolume ? throughput * volume.EmittedRadiance(position, outDirection) : RgbColor.Black;
         }
 
         public override void OnTerminate(ref Walk walk) {

@@ -70,28 +70,28 @@ public class VolumetricPhotonMapper : Integrator {
             TraceAllCameraPaths(iter);
             scene.FrameBuffer.EndIteration();
             surfacePhotonMap.Clear();
+            volumePhotonMap.Clear();
         }
 
         surfacePhotonMap.Dispose();
         surfacePhotonMap = null;
+        volumePhotonMap.Dispose();
+        volumePhotonMap = null;
     }
 
-    List<(int PathIndex, int VertexIndex)> surfacePhotons = new();
-    List<(int PathIndex, int VertexIndex)> volumePhotons = new();
+    List<(int PathIndex, int VertexIndex)> photons = new();
 
     /// <summary>
     /// Builds the photon maps from the cached light paths
     /// </summary>
     protected virtual void ProcessPathCache() {
         int index = 0;
-        surfacePhotons = [];
-        volumePhotons = [];
+        photons = [];
         for (int i = 0; i < lightPaths.NumPaths; ++i) {
             for (int k = 1; k < lightPaths.Length(i); ++k) {
                 var vertex = lightPaths[i, k];
                 if (vertex.Depth >= 1 && vertex.Weight != RgbColor.Black) {
                     var photonMap = vertex.isVolVertex() ? volumePhotonMap : surfacePhotonMap;
-                    var photons = vertex.isVolVertex() ? volumePhotons : surfacePhotons;
                     photonMap.AddPoint(vertex.SurPoint.Position, index++);
                     photons.Add((i, k));
                 }
@@ -133,15 +133,18 @@ public class VolumetricPhotonMapper : Integrator {
         var photon = lightPaths[pathIdx, vertIdx];
         var ancestor = lightPaths[pathIdx, vertIdx - 1];
         var dirToAncestor = Vector3.Normalize(ancestor.SurPoint.Position - photon.SurPoint.Position);
-        HomogeneousVolume volume = photon.Volume.Value;
+        var volume = photon.Volume.Value;
         var photonContrib = volume.InScatteredRadiance(photon.Weight, hitPoint, dirToAncestor, outDir) / NumLightPaths;
 
         // 3d Epanechnikov kernel
         photonContrib *= (radiusSquared - distSqr) * 15.0f / (8.0f * radiusSquared * radiusSquared * radius * MathF.PI);
 
+        //uniform kernel for debugging
+        //photonContrib *= 3/(4*MathF.PI*radius*radiusSquared);
+
         return photonContrib;
     }
-    public float ComputeSurvivalProbability(RgbColor throughput, int depth) {
+    float ComputeSurvivalProbability(RgbColor throughput, int depth) {
         if (depth > 4)
             return Math.Clamp(throughput.Average, 0.50f, 0.95f);
         else
@@ -183,7 +186,7 @@ public class VolumetricPhotonMapper : Integrator {
 
                 volumePhotonMap.ForAllNearest(volPosition, MaxNumPhotons, maxRadius, (position, idx, distance, numFound, maxDist) => {
                     float kernelRadius = numFound == MaxNumPhotons ? maxDist : maxRadius;
-                    estimate += weight * Merge3D(kernelRadius, volPosition, -ray.Direction, volumePhotons[idx].PathIndex, volumePhotons[idx].VertexIndex,
+                    estimate += weight * Merge3D(kernelRadius, volPosition, -ray.Direction, photons[idx].PathIndex, photons[idx].VertexIndex,
                         distance * distance, kernelRadius * kernelRadius);
                 });
 
@@ -203,7 +206,7 @@ public class VolumetricPhotonMapper : Integrator {
                 weight *= volume.Transmittance(hit.Distance) / volume.DistanceGreaterProb(hit.Distance);
                 hitVolume = false; //exit the loop
             }
-        } while (hitVolume);
+        } while (hitVolume && depth <= MaxDepth);
 
 
         //Hit a surface!
@@ -214,14 +217,14 @@ public class VolumetricPhotonMapper : Integrator {
 
         surfacePhotonMap.ForAllNearest(hit.Position, int.MaxValue, radius, (position, idx, distance, numFound, maxDist) => {
             float radiusSquared = numFound == MaxNumPhotons ? maxDist * maxDist : radius * radius;
-            estimate += Merge(radius, hit, -ray.Direction, surfacePhotons[idx].PathIndex, surfacePhotons[idx].VertexIndex,
+            estimate += weight * Merge(radius, hit, -ray.Direction, photons[idx].PathIndex, photons[idx].VertexIndex,
                 distance * distance, radius * radius);
         });
 
         // Add contribution from directly visible light sources
         var light = scene.QueryEmitter(hit);
         if (light != null) {
-            estimate += light.EmittedRadiance(hit, -ray.Direction);
+            estimate += weight * light.EmittedRadiance(hit, -ray.Direction);
         }
 
         return estimate;
