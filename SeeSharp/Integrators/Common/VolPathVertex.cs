@@ -12,7 +12,7 @@ public struct VolPathVertex {
     /// on a surface but somewhere in free space outside the scene.
     /// </summary>
     public SurfacePoint SurPoint;
-    public HomogeneousVolume? Volume;
+    public HomogeneousVolume Volume;
 
     /// <summary>
     /// Surface area pdf to sample this vertex from the previous one, i.e., the actual density this vertex
@@ -61,5 +61,5 @@ public struct VolPathVertex {
         Volume = volume;
     }
 
-    public bool isVolVertex() => Volume != null;
+    public bool IsVolVertex() => Volume != null;
 }

@@ -8,6 +8,7 @@ namespace SeeSharp.Integrators.Common;
 /// <summary>
 /// Performs a random walk, invoking virtual callbacks for events along the path. The state of the walk is
 /// tracked in this object, so it can only be used for one walk at a time.
+/// TODO: being able to sample emissive volume (not trivial!)
 /// </summary>
 public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
     public record struct DirectionSample(
@@ -123,7 +124,9 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
 
     RgbColor ContinueWalk(Ray ray, SurfacePoint previousPoint, float pdfDirection, RgbColor prefixWeight, int depth, int surfaceDepth, HomogeneousVolume volume, bool previouslyHitVolume) {
         RgbColor estimate = RgbColor.Black;
+        Stack<HomogeneousVolume> volumeStack = new(); volumeStack.Push(volume);
         while (depth < maxDepth) {
+            volume = volumeStack.Peek();
             var hit = scene.Raytracer.Trace(ray);
             if (!hit) {
                 estimate += Modifier?.OnInvalidHit(ref this, ray, pdfDirection, prefixWeight, depth, surfaceDepth) ?? RgbColor.Black;
@@ -176,6 +179,9 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
 
             } else {
                 SurfaceShader shader = new(hit, -ray.Direction, isOnLightSubpath);
+                if (shader.CrossedVolume != null) {
+
+                }
 
                 // Convert the PDF of the previous hemispherical sample to surface area
                 float pdfFromAncestor = pdfDirection * volume.DistanceGreaterProb(hit.Distance);
@@ -220,6 +226,13 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                 ApproxThroughput *= dirSample.ApproxReflectance / survivalProb;
 
                 // Continue the path with the next ray
+                if (shader.CrossedVolume != null) {
+                    if (volume == shader.CrossedVolume) { //If crossed volume is the same as what we had on top of the stack, then we exited the medium. We rely on reference equality here.
+                        volumeStack.Pop();
+                    } else {
+                        volumeStack.Push(shader.CrossedVolume);
+                    }
+                }
                 depth++;
                 surfaceDepth++;
                 pdfDirection = dirSample.PdfForward;

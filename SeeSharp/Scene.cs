@@ -59,10 +59,9 @@ public class Scene : IDisposable {
     public Background Background;
 
     /// <summary>
-    /// Defines the optical medium spanning the entire scene, unless overwritten by interface geometry.
+    /// Defines the optical medium spanning the entire scene, unless overwritten by crossing materials with volume property set.
     /// </summary>
-    public HomogeneousVolume GlobalVolume = VolumeFactory.ThickSmoke();
-    //TODO: reading mechanism
+    public HomogeneousVolume GlobalVolume = VolumeFactory.Vacuum();
 
     /// <summary>
     /// Center of the geometry in the scene. Computed by <see cref="Prepare"/>

@@ -6,7 +6,6 @@ public class VolumeFactory {
     /// <summary>
     /// Factory method that returns a medium completely transparent.
     /// </summary>
-    /// <returns>Whether SigmaT is 0.0</returns>
     public static HomogeneousVolume Vacuum() => new() {
         SigmaA = RgbColor.Black,
         SigmaS = RgbColor.Black,

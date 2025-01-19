@@ -1,3 +1,6 @@
+using SeeSharp.Shading.Volumes;
+using System.IO;
+using System.Xml.Linq;
 using static SeeSharp.IO.IMeshLoader;
 
 namespace SeeSharp.IO;
@@ -49,8 +52,46 @@ public static class JsonScene {
         foreach (var m in meshSets) if (m != null) resultScene.Meshes.AddRange(m);
         foreach (var e in emitterSets) if (e != null) resultScene.Emitters.AddRange(e);
     }
+    private static void ReadVolumes(string path, JsonElement root, out Dictionary<string, HomogeneousVolume> namedVolumes) {
+        var namedVols = new Dictionary<string, HomogeneousVolume>();
+        if (root.TryGetProperty("volumes", out var volumes)) {
+            ProgressBar progressBar = new(prefix: "Loading volumes...");
+            progressBar.Start(volumes.GetArrayLength());
 
-    private static void ReadMaterials(string path, JsonElement root, out Dictionary<string, Material> namedMaterials,
+            Parallel.ForEach(volumes.EnumerateArray(), v => {
+                string name = v.GetProperty("name").GetString();
+
+                float ReadOptionalFloat(string name, float defaultValue) {
+                    if (v.TryGetProperty(name, out var elem))
+                        return elem.GetSingle();
+                    return defaultValue;
+                }
+
+                RgbColor sigmaA, sigmaS, emission = RgbColor.Black;
+                float g = 0.0f;
+
+                sigmaA = JsonUtils.ReadRgbColor(v.GetProperty("absorption"));
+                sigmaS = JsonUtils.ReadRgbColor(v.GetProperty("scattering"));
+
+                if (v.TryGetProperty("emission", out var elemEmission)) {
+                    emission = JsonUtils.ReadRgbColor(elemEmission);
+                }
+
+                g = ReadOptionalFloat("g", g);
+
+                lock (namedVols) namedVols[name] = new HomogeneousVolume() {
+                    SigmaA = sigmaA,
+                    SigmaS = sigmaS,
+                    EmissionRadiance = emission,
+                    G = g
+                };
+
+                lock (progressBar) progressBar.ReportDone(1);
+            });
+        }
+        namedVolumes = namedVols;
+    }
+    private static void ReadMaterials(string path, JsonElement root, Dictionary<string, HomogeneousVolume> namedVolumes, out Dictionary<string, Material> namedMaterials,
                                       out Dictionary<string, EmissionParameters> emissiveMaterials) {
 
         var namedMats = new Dictionary<string, Material>();
@@ -79,13 +120,19 @@ public static class JsonScene {
                 if (m.TryGetProperty("type", out var elem)) {
                     type = elem.GetString();
                 }
-
+                HomogeneousVolume volume = null;
+                if (m.TryGetProperty("volume", out var volElem)) {
+                    string volumeName = volElem.GetString();
+                    if (!namedVolumes.TryGetValue(volumeName, out volume)) {
+                        Logger.Warning($"Material {name} references nonexistent volume {volumeName}. The property has been set to null.");
+                    }
+                }
                 if (type == "diffuse") {
                     var parameters = new DiffuseMaterial.Parameters {
                         BaseColor = JsonUtils.ReadColorOrTexture(m.GetProperty("baseColor"), path),
                         Transmitter = ReadOptionalBool("thin", false)
                     };
-                    lock (namedMats) namedMats[name] = new DiffuseMaterial(parameters) { Name = name };
+                    lock (namedMats) namedMats[name] = new DiffuseMaterial(parameters) { Name = name, InterfaceTo = volume };
                 } else {
                     // TODO check that there are no unsupported parameters
                     var parameters = new GenericMaterial.Parameters {
@@ -95,9 +142,9 @@ public static class JsonScene {
                         IndexOfRefraction = ReadOptionalFloat("IOR", 1.01f),
                         Metallic = ReadOptionalFloat("metallic", 0.0f),
                         SpecularTintStrength = ReadOptionalFloat("specularTint", 0.0f),
-                        SpecularTransmittance = ReadOptionalFloat("specularTransmittance", 0.0f),
+                        SpecularTransmittance = ReadOptionalFloat("specularTransmittance", 0.0f)
                     };
-                    lock (namedMats) namedMats[name] = new GenericMaterial(parameters) { Name = name };
+                    lock (namedMats) namedMats[name] = new GenericMaterial(parameters) { Name = name, InterfaceTo = volume };
                 }
 
                 // Check if the material is emissive
@@ -132,6 +179,15 @@ public static class JsonScene {
                 filename = Path.Join(dir, filename);
 
                 resultScene.Background = new EnvironmentMap(new RgbImage(filename));
+            }
+        }
+    }
+
+    private static void ReadGlobalVolume(Scene resultScene, JsonElement root, Dictionary<string, HomogeneousVolume> namedVolumes) {
+        if (root.TryGetProperty("globalVolume", out var globalVolumeElem)) {
+            string globalVolumeName = globalVolumeElem.GetString();
+            if (!namedVolumes.TryGetValue(globalVolumeName, out resultScene.GlobalVolume)) {
+                Logger.Warning($"Global volume references nonexistent volume {globalVolumeName}. The property has been set to null.");
             }
         }
     }
@@ -216,13 +272,14 @@ public static class JsonScene {
             var namedTransforms = ReadNamedTransforms(root);
             ReadCameras(resultScene, root, namedTransforms);
             ReadBackground(path, resultScene, root);
-            ReadMaterials(path, root, out var namedMaterials, out var emissiveMaterials);
+            ReadVolumes(path, root, out var namedVolumes);
+            ReadMaterials(path, root, namedVolumes, out var namedMaterials, out var emissiveMaterials);
             ReadMeshes(path, resultScene, root, namedMaterials, emissiveMaterials);
+            ReadGlobalVolume(resultScene, root, namedVolumes);
 
             if (root.TryGetProperty("exposure", out var exposure))
                 resultScene.RecommendedExposure = exposure.GetSingle();
         }
-
         return resultScene;
     }
 }

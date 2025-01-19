@@ -1,4 +1,6 @@
-﻿namespace SeeSharp.Geometry;
+﻿using SeeSharp.Shading.Volumes;
+
+namespace SeeSharp.Geometry;
 
 /// <summary>
 /// Represents a point on the surface of a mesh in the scene. Wrapper around <see cref="Hit"/> with

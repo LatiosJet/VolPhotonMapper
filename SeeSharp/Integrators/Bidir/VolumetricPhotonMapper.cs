@@ -6,6 +6,7 @@ namespace SeeSharp.Integrators.Bidir;
 /// <summary>
 /// A pure photon mapper in its most naive form: merging at the first camera vertex with a fixed radius
 /// computed from a fraction of the scene size.
+/// TODO: being able to sample emissive volume (not trivial!)
 /// </summary>
 public class VolumetricPhotonMapper : Integrator {
     /// <summary>
@@ -91,7 +92,7 @@ public class VolumetricPhotonMapper : Integrator {
             for (int k = 1; k < lightPaths.Length(i); ++k) {
                 var vertex = lightPaths[i, k];
                 if (vertex.Depth >= 1 && vertex.Weight != RgbColor.Black) {
-                    var photonMap = vertex.isVolVertex() ? volumePhotonMap : surfacePhotonMap;
+                    var photonMap = vertex.IsVolVertex() ? volumePhotonMap : surfacePhotonMap;
                     photonMap.AddPoint(vertex.SurPoint.Position, index++);
                     photons.Add((i, k));
                 }
@@ -133,7 +134,7 @@ public class VolumetricPhotonMapper : Integrator {
         var photon = lightPaths[pathIdx, vertIdx];
         var ancestor = lightPaths[pathIdx, vertIdx - 1];
         var dirToAncestor = Vector3.Normalize(ancestor.SurPoint.Position - photon.SurPoint.Position);
-        var volume = photon.Volume.Value;
+        var volume = photon.Volume;
         var photonContrib = volume.InScatteredRadiance(photon.Weight, hitPoint, dirToAncestor, outDir) / NumLightPaths;
 
         // 3d Epanechnikov kernel

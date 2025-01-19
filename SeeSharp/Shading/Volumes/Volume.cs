@@ -39,7 +39,7 @@ public record struct DirectionSample {
     public readonly float ReversePdf => pdf;
 }
 
-public struct HomogeneousVolume {
+public class HomogeneousVolume {
 
     
 
@@ -58,12 +58,18 @@ public struct HomogeneousVolume {
     /// <summary>
     /// Isotropic radiance emission
     /// </summary>
-    public required RgbColor EmissionRadiance;
-    public readonly RgbColor SigmaT => SigmaA + SigmaS;
-    public readonly RgbColor Albedo => SigmaS / SigmaT;
+    public RgbColor EmissionRadiance = RgbColor.Black;
+
+    /// <summary>
+    /// g-value for the Henyey-Greenstein phase function. g in [-1, 1], where 0 is isotropic, 1 is fully forward scattering and -1 is fully backward scattering.
+    /// TODO: actually implement the Henyey-Greenstein
+    /// </summary>
+    public float G = 0.0f;
+    public RgbColor SigmaT => SigmaA + SigmaS;
+    public RgbColor Albedo => SigmaS / SigmaT;
     //public float Mfp => 1.0f / SigmaT;
 
-    public readonly RgbColor Transmittance(float distance) {
+    public RgbColor Transmittance(float distance) {
         return new RgbColor() {
             R = MathF.Exp(-SigmaT.R * distance),
             G = MathF.Exp(-SigmaT.G * distance),
@@ -72,21 +78,21 @@ public struct HomogeneousVolume {
             
     }
 
-    public readonly RgbColor Transmittance(Vector3 x, Vector3 y) {
+    public RgbColor Transmittance(Vector3 x, Vector3 y) {
         return Transmittance((y - x).Length());
     }
     /// <summary>
     /// Computed over the 3 channels. This way we have the average of the mean free paths.
     /// </summary>
-    private readonly float SigmaTHarmonicMean => 3.0f / ((1.0f / SigmaT.R) + (1.0f / SigmaT.G) + (1.0f / SigmaT.B));
+    private float SigmaTHarmonicMean => 3.0f / ((1.0f / SigmaT.R) + (1.0f / SigmaT.G) + (1.0f / SigmaT.B));
 
     /// <summary>
     /// How "specular" the transmission through the volume is. 1.0 is perfectly diffuse, 0.0 is perfectly specular. 1.0 for now since it's an isotropic medium.
     /// </summary>
-    public readonly float GetRoughness() => 1.0f;
+    public float GetRoughness() => 1.0f;
 
-    public readonly float DistancePdf(float distance) => SigmaTHarmonicMean * MathF.Exp(-SigmaTHarmonicMean * distance);
-    public readonly float DistanceGreaterProb(float distance) => MathF.Exp(-SigmaTHarmonicMean * distance);
+    public float DistancePdf(float distance) => SigmaTHarmonicMean * MathF.Exp(-SigmaTHarmonicMean * distance);
+    public float DistanceGreaterProb(float distance) => MathF.Exp(-SigmaTHarmonicMean * distance);
 
     /// <summary>
     /// Phase function. Isotropic for now.
@@ -94,7 +100,7 @@ public struct HomogeneousVolume {
     /// <param name="inDirection">The incoming direction (vector leaves the point)</param>
     /// <param name="outDirection">The outgoing direction (vector leaves the point)</param>
     /// <returns></returns>
-    public readonly RgbColor PhaseFunction(Vector3 inDirection, Vector3 outDirection) => new(1.0f / (4.0f*MathF.PI));
+    public RgbColor PhaseFunction(Vector3 inDirection, Vector3 outDirection) => new(1.0f / (4.0f*MathF.PI));
 
     /// <summary>
     /// Pdf for importance sampling. Same as phase function.
@@ -102,7 +108,7 @@ public struct HomogeneousVolume {
     /// <param name="inDirection">The incoming direction (vector leaves the point)</param>
     /// <param name="outDirection">The outgoing direction (vector leaves the point)</param>
     /// <returns></returns>
-    public readonly float DirectionPdf(Vector3 inDirection, Vector3 outDirection) => 1.0f / (4.0f * MathF.PI);
+    public float DirectionPdf(Vector3 inDirection, Vector3 outDirection) => 1.0f / (4.0f * MathF.PI);
 
     /// <summary>
     /// Samples distance given exponential distribution of the harmonic mean of the coefficients.
@@ -150,7 +156,7 @@ public struct HomogeneousVolume {
     /// <param name="position"></param>
     /// <param name="outDirection"></param>
     /// <returns></returns>
-    public readonly RgbColor EmittedRadiance(Vector3 position, Vector3 outDirection) => EmissionRadiance * SigmaA;
+    public RgbColor EmittedRadiance(Vector3 position, Vector3 outDirection) => EmissionRadiance * SigmaA;
 
     /// <summary>
     /// Converts incoming irradiance in direction inDirection to outgoing radiance in direction outDirection.
@@ -161,7 +167,7 @@ public struct HomogeneousVolume {
     /// <param name="inDirection">The incoming direction (vector leaves the point)</param>
     /// <param name="outDirection">The outgoing direction (vector leaves the point)</param>
     /// <returns></returns>
-    public readonly RgbColor InScatteredRadiance(RgbColor inRadiance, Vector3 position, Vector3 inDirection, Vector3 outDirection) => inRadiance * PhaseFunction(inDirection, outDirection) * SigmaS;
+    public RgbColor InScatteredRadiance(RgbColor inRadiance, Vector3 position, Vector3 inDirection, Vector3 outDirection) => inRadiance * PhaseFunction(inDirection, outDirection) * SigmaS;
 
-    public readonly bool IsVacuum() => SigmaT.Average <= 0.0f; //Negative values make no sense
+    public bool IsVacuum() => SigmaT.Average <= 0.0f; //Negative values make no sense
 }
