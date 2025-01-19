@@ -179,9 +179,6 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
 
             } else {
                 SurfaceShader shader = new(hit, -ray.Direction, isOnLightSubpath);
-                if (shader.CrossedVolume != null) {
-
-                }
 
                 // Convert the PDF of the previous hemispherical sample to surface area
                 float pdfFromAncestor = pdfDirection * volume.DistanceGreaterProb(hit.Distance);

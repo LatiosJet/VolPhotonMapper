@@ -10,7 +10,7 @@
   "RenderTechniquePyramid": false,
   "EnableDenoiser": true,
   "OutlierCache": null,
-  "MaxDepth": 5,
+  "MaxDepth": 100,
   "MinDepth": 1
 }
 }
