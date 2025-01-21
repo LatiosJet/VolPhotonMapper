@@ -9,7 +9,8 @@ public class VolumeFactory {
     public static HomogeneousVolume Vacuum() => new() {
         SigmaA = RgbColor.Black,
         SigmaS = RgbColor.Black,
-        EmissionRadiance = RgbColor.Black
+        EmissionRadiance = RgbColor.Black,
+        Name = "Vacuum"
     };
     /// <summary>
     /// Returns a medium with the given albedo and such that every "halfDistance" meters visibility is halved

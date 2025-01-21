@@ -129,12 +129,14 @@ public class DiffuseMaterial : Material {
 
         var baseColor = MaterialParameters.BaseColor.Lookup(context.Point.TextureCoordinates);
         Vector3? sample;
+        bool transmitted = false;
         if (MaterialParameters.Transmitter) {
             // Pick either transmission or reflection
             if (primarySample.X < 0.5f) {
                 var remapped = primarySample;
                 remapped.X = Math.Min(primarySample.X / 0.5f, 1);
                 sample = new DiffuseTransmission(baseColor).Sample(context.OutDir, context.IsOnLightSubpath, remapped);
+                transmitted = true;
             } else {
                 var remapped = primarySample;
                 remapped.X = Math.Min((primarySample.X - 0.5f) / 0.5f, 1);
@@ -163,7 +165,8 @@ public class DiffuseMaterial : Material {
             Pdf = pdfFwd,
             PdfReverse = pdfRev,
             Weight = value / pdfFwd,
-            Direction = sampledDir
+            Direction = sampledDir,
+            Transmission = transmitted
         };
     }
 

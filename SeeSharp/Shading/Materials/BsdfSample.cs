@@ -4,6 +4,7 @@ public struct BsdfSample {
     public Vector3 Direction;
     public float Pdf;
     public float PdfReverse;
+    public bool Transmission;
 
     /// <summary>
     /// Sample weight of the reflectance estimate, i.e., the product of
@@ -12,7 +13,7 @@ public struct BsdfSample {
     public RgbColor Weight;
 
     public static BsdfSample Invalid
-    => new() { Pdf = 0, PdfReverse = 0, Weight = RgbColor.Black };
+    => new() { Pdf = 0, PdfReverse = 0, Weight = RgbColor.Black, Transmission = false };
 
     public static implicit operator bool(BsdfSample sample)
     => sample.Pdf > 0 && sample.PdfReverse > 0;

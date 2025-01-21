@@ -16,7 +16,8 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
         float PdfReverse,
         RgbColor Weight,
         Vector3 Direction,
-        RgbColor ApproxReflectance
+        RgbColor ApproxReflectance,
+        bool Transmission
     ) {}
 
     public abstract class RandomWalkModifier {
@@ -111,13 +112,14 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
             bsdfSample.PdfReverse,
             bsdfSample.Weight,
             bsdfSample.Direction,
-            bsdfSample.Weight
+            bsdfSample.Weight,
+            bsdfSample.Transmission
         );
     }
 
     public float ComputeSurvivalProbability(int depth) {
         if (depth > 4)
-            return Math.Clamp(ApproxThroughput.Average, 0.05f, 0.95f);
+            return Math.Clamp(ApproxThroughput.Average, 0.5f, 0.95f);
         else
             return 1.0f;
     }
@@ -133,7 +135,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                 break;
             }
 
-            DistanceSample distSample = volume.SampleDistance(rng.NextFloat());
+            DistanceSample distSample = volume.SampleDistance(rng.NextFloat(), 10f);
             if (hit.Distance > distSample.distance) {
                 Vector3 newPosition = ray.ComputePoint(distSample.distance);
                 float pdfFromAncestor = pdfDirection * distSample.pdf;
@@ -223,11 +225,13 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                 ApproxThroughput *= dirSample.ApproxReflectance / survivalProb;
 
                 // Continue the path with the next ray
-                if (shader.CrossedVolume != null) {
-                    if (volume == shader.CrossedVolume) { //If crossed volume is the same as what we had on top of the stack, then we exited the medium. We rely on reference equality here.
+                var crossedVolume = shader.material.InterfaceTo;
+                if (crossedVolume != null && dirSample.Transmission) {
+                    bool entering = Vector3.Dot(dirSample.Direction, shader.Context.Normal) <= 0.0f;
+                    if (entering) {
+                        volumeStack.Push(crossedVolume);
+                    } else if (volumeStack.Count > 1) {
                         volumeStack.Pop();
-                    } else {
-                        volumeStack.Push(shader.CrossedVolume);
                     }
                 }
                 depth++;

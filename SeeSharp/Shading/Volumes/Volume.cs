@@ -40,20 +40,17 @@ public record struct DirectionSample {
 }
 
 public class HomogeneousVolume {
-
-    
-
     public string Name { get; init; }
 
     /// <summary>
     /// Absorption coefficient [m^-1]
     /// </summary>
-    public required RgbColor SigmaA;
+    public required RgbColor SigmaA { get; init; }
 
     /// <summary>
     /// Scattering coefficient [m^-1]
     /// </summary>
-    public required RgbColor SigmaS;
+    public required RgbColor SigmaS { get; init; }
 
     /// <summary>
     /// Isotropic radiance emission
@@ -75,7 +72,6 @@ public class HomogeneousVolume {
             G = MathF.Exp(-SigmaT.G * distance),
             B = MathF.Exp(-SigmaT.B * distance),
         };
-            
     }
 
     public RgbColor Transmittance(Vector3 x, Vector3 y) {
@@ -91,7 +87,7 @@ public class HomogeneousVolume {
     /// </summary>
     public float GetRoughness() => 1.0f;
 
-    public float DistancePdf(float distance) => SigmaTHarmonicMean * MathF.Exp(-SigmaTHarmonicMean * distance);
+    public float DistancePdf(float distance, float multiplier) => (SigmaTHarmonicMean*multiplier) * MathF.Exp(-SigmaTHarmonicMean * multiplier * distance);
     public float DistanceGreaterProb(float distance) => MathF.Exp(-SigmaTHarmonicMean * distance);
 
     /// <summary>
@@ -116,7 +112,7 @@ public class HomogeneousVolume {
     /// <param name="primarySample"></param>
     /// <returns>INFINITE DISTANCE if volume is vacuum, else finite distance, pdf and probability of exceeding the distance.</returns>
     /// 
-    public DistanceSample SampleDistance(float primarySample) {
+    public DistanceSample SampleDistance(float primarySample, float multiplier=1.0f) {
         if (IsVacuum()) {
             return new() {
                 distance = float.PositiveInfinity
@@ -125,8 +121,8 @@ public class HomogeneousVolume {
 
         Debug.Assert(SigmaT.R > 0.0f && SigmaT.G > 0.0f && SigmaT.B > 0.0f);
 
-        float distance = -MathF.Log(1-primarySample)/SigmaTHarmonicMean;
-        float pdf = DistancePdf(distance);
+        float distance = -MathF.Log(1-primarySample)/(SigmaTHarmonicMean*multiplier);
+        float pdf = DistancePdf(distance, multiplier);
         return new DistanceSample() {
             distance = distance,
             weight = Transmittance(distance) / pdf,
@@ -170,4 +166,8 @@ public class HomogeneousVolume {
     public RgbColor InScatteredRadiance(RgbColor inRadiance, Vector3 position, Vector3 inDirection, Vector3 outDirection) => inRadiance * PhaseFunction(inDirection, outDirection) * SigmaS;
 
     public bool IsVacuum() => SigmaT.Average <= 0.0f; //Negative values make no sense
+
+    public override string ToString() {
+        return "HomogeneousVolume " + Name;
+    }
 }

@@ -80,11 +80,14 @@ public static class JsonScene {
                 g = ReadOptionalFloat("g", g);
 
                 lock (namedVols) namedVols[name] = new HomogeneousVolume() {
+                    Name = name,
                     SigmaA = sigmaA,
                     SigmaS = sigmaS,
                     EmissionRadiance = emission,
                     G = g
                 };
+
+                //lock (namedVols) namedVols[name] = VolumeFactory.Vacuum(); //Disable all volumes
 
                 lock (progressBar) progressBar.ReportDone(1);
             });

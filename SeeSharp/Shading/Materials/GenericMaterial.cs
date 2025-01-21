@@ -130,6 +130,7 @@ public partial class GenericMaterial  : Material
 
         // Sample a direction from the selected component
         Vector3 inDir;
+        bool transmitted = false;
         if (c == 0)
         {
             // Sample diffuse
@@ -154,6 +155,7 @@ public partial class GenericMaterial  : Material
             if (!i.HasValue)
                 i = Reflect(context.OutDir, halfVector);
             inDir = i.Value;
+            transmitted = true;
         }
 
         var eval = ComputeValueAndPdf(context, inDir, localParams, ref componentWeights);
@@ -164,7 +166,8 @@ public partial class GenericMaterial  : Material
             Pdf = eval.Pdf,
             PdfReverse = eval.PdfReverse,
             Weight = eval.Value * float.Abs(inDir.Z) / eval.Pdf,
-            Direction = context.ShadingToWorld(inDir)
+            Direction = context.ShadingToWorld(inDir),
+            Transmission = transmitted
         };
     }
 

@@ -9,7 +9,6 @@ public struct ShadingContext {
     public Vector3 Normal;
     public Vector3 Tangent;
     public Vector3 Binormal;
-    public HomogeneousVolume CrossedVolume;
 
     /// <summary>
     /// Outgoing direction in shading space
@@ -25,7 +24,6 @@ public struct ShadingContext {
         ComputeBasisVectors(Normal, out Tangent, out Binormal);
         OutDir = WorldToShading(outDir);
         OutDirWorld = outDir;
-        CrossedVolume = Vector3.Dot(point.Normal, OutDir) < 0.0f ? point.Material.InterfaceTo : null;
     }
 
     public Vector3 WorldToShading(in Vector3 dir) => ShadingSpace.WorldToShading(Normal, Tangent, Binormal, dir);
@@ -39,7 +37,7 @@ public struct ShadingContext {
 /// given an outgoing ray direction.
 /// </summary>
 public struct SurfaceShader {
-    readonly Material material;
+    public readonly Material material;
 
     public ShadingContext Context;
     public SurfacePoint Point => Context.Point;
@@ -49,8 +47,6 @@ public struct SurfaceShader {
         Context = new(point, outDir, isOnLightSubpath);
         material.PopulateContext(ref Context);
     }
-
-    public HomogeneousVolume CrossedVolume => Context.CrossedVolume;
 
     /// <summary>
     /// Computes the surface roughness, a value between 0 and 1.

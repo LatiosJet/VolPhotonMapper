@@ -1,0 +1,19 @@
+{
+  "NumIterations": 512,
+  "RenderTime": 55146,
+  "FrameBufferTime": 493,
+  "ShadingStats": {
+    "NumMaterialEval": 183353830,
+    "NumMaterialSample": 148753414,
+    "NumMaterialPdf": 183353830
+  },
+  "RayTracerStats": {
+    "NumShadowRays": 297506828,
+    "NumRays": 210468164,
+    "NumOccluded": 114152998,
+    "NumRayHits": 154377236
+  },
+  "NaNWarnings": [],
+  "RenderStartTime": "20/1/2025 23:37:09",
+  "RenderWriteTime": "20/1/2025 23:38:06"
+}
