@@ -87,16 +87,28 @@ public class HomogeneousVolume {
     /// </summary>
     public float GetRoughness() => 1.0f;
 
-    public float DistancePdf(float distance, float multiplier) => (SigmaTHarmonicMean*multiplier) * MathF.Exp(-SigmaTHarmonicMean * multiplier * distance);
+    public float DistancePdf(float distance) => SigmaTHarmonicMean * MathF.Exp(-SigmaTHarmonicMean * distance);
     public float DistanceGreaterProb(float distance) => MathF.Exp(-SigmaTHarmonicMean * distance);
 
+    float PdfUniform = 1 / (4 * MathF.PI);
+    public RgbColor PhaseFunctionUniform => new RgbColor(PdfUniform);
+
     /// <summary>
-    /// Phase function. Isotropic for now.
+    /// Phase function
     /// </summary>
     /// <param name="inDirection">The incoming direction (vector leaves the point)</param>
     /// <param name="outDirection">The outgoing direction (vector leaves the point)</param>
     /// <returns></returns>
-    public RgbColor PhaseFunction(Vector3 inDirection, Vector3 outDirection) => new(1.0f / (4.0f*MathF.PI));
+    public RgbColor PhaseFunction(Vector3 inDirection, Vector3 outDirection) {
+        if (G < 1e-4f)
+            return PhaseFunctionUniform;
+
+        float g_sqr = G * G;
+        float cosAngle = Vector3.Dot(inDirection, outDirection);
+        float aux = 1 + g_sqr + 2 * G * cosAngle;
+        float value = (1 - g_sqr) / (4 * MathF.PI * aux * MathF.Sqrt(aux));
+        return new RgbColor(value);
+    }
 
     /// <summary>
     /// Pdf for importance sampling. Same as phase function.
@@ -104,7 +116,7 @@ public class HomogeneousVolume {
     /// <param name="inDirection">The incoming direction (vector leaves the point)</param>
     /// <param name="outDirection">The outgoing direction (vector leaves the point)</param>
     /// <returns></returns>
-    public float DirectionPdf(Vector3 inDirection, Vector3 outDirection) => 1.0f / (4.0f * MathF.PI);
+    public float DirectionPdf(Vector3 inDirection, Vector3 outDirection) => PhaseFunction(inDirection, outDirection).Average;
 
     /// <summary>
     /// Samples distance given exponential distribution of the harmonic mean of the coefficients.
@@ -112,7 +124,7 @@ public class HomogeneousVolume {
     /// <param name="primarySample"></param>
     /// <returns>INFINITE DISTANCE if volume is vacuum, else finite distance, pdf and probability of exceeding the distance.</returns>
     /// 
-    public DistanceSample SampleDistance(float primarySample, float multiplier=1.0f) {
+    public DistanceSample SampleDistance(float primarySample) {
         if (IsVacuum()) {
             return new() {
                 distance = float.PositiveInfinity
@@ -121,12 +133,20 @@ public class HomogeneousVolume {
 
         Debug.Assert(SigmaT.R > 0.0f && SigmaT.G > 0.0f && SigmaT.B > 0.0f);
 
-        float distance = -MathF.Log(1-primarySample)/(SigmaTHarmonicMean*multiplier);
-        float pdf = DistancePdf(distance, multiplier);
+        float distance = -MathF.Log(1-primarySample)/SigmaTHarmonicMean;
+        float pdf = DistancePdf(distance);
         return new DistanceSample() {
             distance = distance,
             weight = Transmittance(distance) / pdf,
             pdf = pdf
+        };
+    }
+    public DirectionSample SampleDirectionUniform(Vector2 primarySample) {
+        SampleWarp.DirectionSample dirSample = SampleWarp.ToUniformSphere(primarySample);
+        return new() {
+            direction = dirSample.Direction,
+            weight = SigmaS * PhaseFunctionUniform / PdfUniform,
+            pdf = PdfUniform
         };
     }
 
@@ -137,11 +157,24 @@ public class HomogeneousVolume {
     /// <param name="inDirection">The incoming direction (vector leaves the point)</param>
     /// <returns></returns>
     public DirectionSample SampleDirection(Vector3 inDirection, Vector2 primarySample) {
-        SampleWarp.DirectionSample dirSample = SampleWarp.ToUniformSphere(primarySample);
-        float pdf = DirectionPdf(inDirection, dirSample.Direction);
+        if (G < 1e-5) {
+            return SampleDirectionUniform(primarySample);
+        }
+
+        float g_sqr = G * G;
+        float aux = MathF.Abs(G) > 1 - 1e-5f ? 0.0f : (1 - g_sqr) / (1 + G - 2 * G * primarySample.X);
+        float cosTheta = - (1 + g_sqr - aux*aux) / (2 * G); //The minus sign is because in case of forward scattering, the sample must point in the opposite direction since both inDirection and outDirection point away from the point in the volume.
+        cosTheta = float.Clamp(cosTheta, -1, 1); //Needed when primarySample.X approaches 0 or 1
+        float sinTheta = MathF.Sqrt(1 - cosTheta * cosTheta);
+        float phi = 2 * MathF.PI * primarySample.Y;
+
+        Vector3 outDirectionLocal = SampleWarp.SphericalToCartesian(sinTheta, cosTheta, phi);
+        SanityChecks.IsNormalized(outDirectionLocal);
+        Vector3 outDirection = ShadingToWorld(inDirection, outDirectionLocal);
+        float pdf = DirectionPdf(inDirection, outDirection);
         return new() {
-            direction = dirSample.Direction,
-            weight = SigmaS * PhaseFunction(inDirection, dirSample.Direction) / pdf,
+            direction = outDirection,
+            weight = SigmaS * PhaseFunction(inDirection, outDirection) / pdf,
             pdf = pdf
         };
     }

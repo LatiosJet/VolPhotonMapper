@@ -119,7 +119,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
 
     public float ComputeSurvivalProbability(int depth) {
         if (depth > 4)
-            return Math.Clamp(ApproxThroughput.Average, 0.5f, 0.95f);
+            return Math.Clamp(ApproxThroughput.Average, 0.05f, 0.95f);
         else
             return 1.0f;
     }
@@ -135,13 +135,16 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                 break;
             }
 
-            DistanceSample distSample = volume.SampleDistance(rng.NextFloat(), 10f);
+            DistanceSample distSample = volume.SampleDistance(rng.NextFloat());
             if (hit.Distance > distSample.distance) {
                 Vector3 newPosition = ray.ComputePoint(distSample.distance);
                 float pdfFromAncestor = pdfDirection * distSample.pdf;
 
                 ApproxThroughput *= distSample.weight;
                 prefixWeight *= distSample.weight;
+
+                if (!float.IsFinite(prefixWeight.Average) || prefixWeight == RgbColor.Black)
+                    break;
 
                 float jacobian = 1.0f;
                 //float jacobian = previouslyHitVolume ? 1.0f : SampleWarp.SurfaceAreaToSolidAngle(hit, previousPoint);
@@ -163,7 +166,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
 
                 estimate += Modifier?.OnContinue(ref this, newPosition, dirSample.direction, pdfToAncestor, prefixWeight, volume, depth, surfaceDepth, previouslyHitVolume) ?? RgbColor.Black;
 
-                if (dirSample.pdf == 0 || dirSample.weight == RgbColor.Black)
+                if (dirSample.pdf == 0.0f || dirSample.weight == RgbColor.Black)
                     break;
 
                 ApproxThroughput *= dirSample.weight / survivalProb;

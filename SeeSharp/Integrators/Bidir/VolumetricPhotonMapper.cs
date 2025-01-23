@@ -8,6 +8,7 @@ namespace SeeSharp.Integrators.Bidir;
 /// computed from a fraction of the scene size.
 /// TODO: being able to sample emissive volume (not trivial!)
 /// </summary>
+/// 
 public class VolumetricPhotonMapper : Integrator {
     /// <summary>
     /// Number of iterations to render.
@@ -46,6 +47,36 @@ public class VolumetricPhotonMapper : Integrator {
 
     NearestNeighborSearch<int> surfacePhotonMap;
     NearestNeighborSearch<int> volumePhotonMap;
+
+    public virtual float BackgroundProbability 
+    => scene.Background != null && scene.GlobalVolume.IsVacuum() ? 1.0f / (1.0f + scene.Emitters.Count) : 0.0f;
+
+    /// <summary>
+    /// Randomly samples either the background or an emitter from the scene
+    /// </summary>
+    /// <returns>The emitter and its selection probability</returns>
+    public virtual (Emitter, float) SelectLight(ref RNG rng) {
+        Emitter light;
+        if (BackgroundProbability > 0 && rng.NextFloat() <= BackgroundProbability) {
+            light = null;
+        } else {
+            light = scene.Emitters[rng.NextInt(scene.Emitters.Count)];
+        }
+        return (light, SelectLightPmf(light));
+    }
+
+    /// <summary>
+    /// Computes the sampling probability used by <see cref="SelectLight"/>
+    /// </summary>
+    /// <param name="em">An emitter in the scene</param>
+    /// <returns>The selection probability</returns>
+    public virtual float SelectLightPmf(Emitter em) {
+        if (em == null) { // background
+            return BackgroundProbability;
+        } else {
+            return (1 - BackgroundProbability) / scene.Emitters.Count;
+        }
+    }
 
     /// <inheritdoc />
     public override void Render(Scene scene) {
@@ -103,7 +134,6 @@ public class VolumetricPhotonMapper : Integrator {
                 }
             }
         }
-        Logger.Log($"This iteration surface | volume photons are {surVertices} | {volVertices}");
         surfacePhotonMap.Build();
         volumePhotonMap.Build();
     }
@@ -142,6 +172,8 @@ public class VolumetricPhotonMapper : Integrator {
         var dirToAncestor = Vector3.Normalize(ancestor.SurPoint.Position - photon.SurPoint.Position);
         var volume = photon.Volume;
         var photonContrib = volume.InScatteredRadiance(photon.Weight, hitPoint, dirToAncestor, outDir) / NumLightPaths;
+        if (!float.IsFinite(photonContrib.Average))
+            return RgbColor.Black;
 
         // 3d Epanechnikov kernel
         photonContrib *= (radiusSquared - distSqr) * 15.0f / (8.0f * radiusSquared * radiusSquared * radius * MathF.PI);
@@ -150,7 +182,7 @@ public class VolumetricPhotonMapper : Integrator {
     }
     float ComputeSurvivalProbability(RgbColor throughput, int depth) {
         if (depth > 4)
-            return Math.Clamp(throughput.Average, 0.50f, 0.95f);
+            return Math.Clamp(throughput.Average, 0.05f, 0.95f);
         else
             return 1.0f;
     }
@@ -169,17 +201,23 @@ public class VolumetricPhotonMapper : Integrator {
         int depth = 1;
         Stack<HomogeneousVolume> volumeStack = new(); volumeStack.Push(scene.GlobalVolume);
         bool notHitDiffuse = true;
-        Hit hit;
+        bool performedNEE = false;
+        float bsdf_pdf = 0.0f; //For MIS. Its default value will never be used.
+        Hit hit, prevHit = new();
         Emitter light;
         do {
             HomogeneousVolume volume = volumeStack.Peek();
             hit = scene.Raytracer.Trace(ray);
             if (!hit) {
-                if (volume.IsVacuum())
-                    return weight * scene.Background?.EmittedRadiance(ray.Direction) ?? RgbColor.Black;
-                else {
-                    return RgbColor.Black;
+                if (scene.Background != null && volume.IsVacuum()) {
+                    float bsdf_mis_weight = 1.0f;
+                    if (performedNEE) {
+                        float bsdf_nee_pdf = scene.Background.DirectionPdf(ray.Direction) * BackgroundProbability;
+                        bsdf_mis_weight = 1 / (1 + (bsdf_nee_pdf/ bsdf_pdf));
+                    }
+                    estimate += weight * bsdf_mis_weight * scene.Background.EmittedRadiance(ray.Direction);
                 }
+                return estimate;
             }
             var distSample = volume.SampleDistance(rng.NextFloat());
             if (distSample.distance < hit.Distance) {
@@ -188,7 +226,7 @@ public class VolumetricPhotonMapper : Integrator {
                 estimate += weight * volume.EmittedRadiance(volPosition, -ray.Direction);
 
                 //for each photon in radius, compute radiance contribution, estimate in scattered radiance
-                float maxRadius = scene.Radius / 10.0f;
+                float maxRadius = scene.Radius / 100.0f;
 
                 volumePhotonMap.ForAllNearest(volPosition, MaxNumPhotons, maxRadius, (position, idx, distance, numFound, maxDist) => {
                     float kernelRadius = numFound == MaxNumPhotons ? maxDist : maxRadius;
@@ -196,7 +234,7 @@ public class VolumetricPhotonMapper : Integrator {
                         distance * distance, kernelRadius * kernelRadius);
                 });
 
-                if (depth > MaxDepth)
+                if (depth + 1 > MaxDepth)
                     return estimate;
 
                 float survivalProb = ComputeSurvivalProbability(weight, depth);
@@ -204,22 +242,35 @@ public class VolumetricPhotonMapper : Integrator {
                     return estimate;
                 }
 
+                performedNEE = false;
+
                 var dirSample = volume.SampleDirection(-ray.Direction, rng.NextFloat2D());
+
+                if (dirSample.pdf == 0.0f || dirSample.weight == RgbColor.Black)
+                    return estimate;
+
                 weight *= dirSample.weight / survivalProb;
                 ray = new Ray() {
                     Direction = dirSample.direction,
                     Origin = volPosition,
                     MinDistance = 0
                 };
+
             } else {
                 weight *= volume.Transmittance(hit.Distance) / volume.DistanceGreaterProb(hit.Distance);
                 SurfaceShader shader = new(hit, -ray.Direction, false);
-                if (shader.GetRoughness() < 0.1f) {
+                if (shader.GetRoughness() < 0.5f || depth <= 4) {
                     light = scene.QueryEmitter(hit);
+                    if (light != null) {
+                        float bsdf_mis_weight = 1.0f;
+                        if (performedNEE) {
+                            float bsdf_nee_pdf = light.PdfUniformArea(hit) / SampleWarp.SurfaceAreaToSolidAngle(prevHit, hit) * SelectLightPmf(light);
+                            bsdf_mis_weight = 1 / (1 + (bsdf_nee_pdf/bsdf_pdf));
+                        }
+                        estimate += weight * bsdf_mis_weight * light.EmittedRadiance(hit, -ray.Direction);
+                    }
 
-                    estimate += weight * light?.EmittedRadiance(hit, -ray.Direction) ?? RgbColor.Black; //Maybe MIS?
-
-                    if (depth > MaxDepth)
+                    if (depth + 1 > MaxDepth)
                         return estimate;
 
                     float survivalProb = ComputeSurvivalProbability(weight, depth);
@@ -227,36 +278,65 @@ public class VolumetricPhotonMapper : Integrator {
                         return estimate;
                     }
 
+                    weight /= survivalProb;
+
+
+                    if (volume.IsVacuum() && shader.GetRoughness() > 0.0f) {
+                        performedNEE = true;
+                        RgbColor neeContrib = RgbColor.Black;
+                        (light, float lightPmf) = SelectLight(ref rng);
+                        Vector3 toLight;
+                        float neePdf = lightPmf;
+                        if (light == null) {
+                            var bgSample = scene.Background.SampleDirection(rng.NextFloat2D()); // sr^-1 pdf
+                            toLight = bgSample.Direction;
+                            neePdf *= bgSample.Pdf;
+                            if (scene.Raytracer.LeavesScene(hit, toLight))
+                                neeContrib = bgSample.Weight / lightPmf * shader.EvaluateWithCosine(toLight);
+                        } else {
+                            var lightSample = light.SampleUniformArea(rng.NextFloat2D());
+                            toLight = Vector3.Normalize(lightSample.Point.Position - hit.Position);
+                            neePdf *= lightSample.Pdf / SampleWarp.SurfaceAreaToSolidAngle(hit, lightSample.Point);
+                            if (!scene.Raytracer.IsOccluded(hit, lightSample.Point))
+                                neeContrib = light.EmittedRadiance(lightSample.Point, -toLight) * shader.EvaluateWithCosine(toLight) / neePdf;
+                        }
+                        (float nee_bsdf_pdf, _) = shader.Pdf(toLight);
+                        float nee_mis_weight = 1 / (1 + (nee_bsdf_pdf/ neePdf));
+                        estimate += weight * neeContrib * nee_mis_weight;
+                    } else {
+                        performedNEE = false;
+                    }
+
                     var dirSample = shader.Sample(rng.NextFloat2D());
 
                     //Avoid NaN
                     if (dirSample.Weight == RgbColor.Black || dirSample.Pdf == 0.0f)
                         return estimate;
-
-                    weight *= dirSample.Weight / survivalProb;
+                    weight *= dirSample.Weight;
+                    bsdf_pdf = dirSample.Pdf;
 
                     var crossedVolume = shader.material.InterfaceTo;
                     if (crossedVolume != null && dirSample.Transmission) {
-                        //bool entering = Vector3.Dot(dirSample.Direction, shader.Context.Normal) <= 0.0f;
-                        if (volume == crossedVolume) {
-                            volumeStack.Pop();
-                        } else {
+                        bool entering = Vector3.Dot(dirSample.Direction, shader.Context.Normal) <= 0.0f;
+                        if (entering) {
                             volumeStack.Push(crossedVolume);
+                        } else if (volumeStack.Count > 1) {
+                            volumeStack.Pop();
                         }
                     }
-
-                    depth++;
                     ray = Raytracer.SpawnRay(hit, dirSample.Direction);
                 }
-                else 
+                else {
                     notHitDiffuse = false; //exit the loop
+                }
             }
+            prevHit = hit;
+            depth++;
         } while (notHitDiffuse);
-
 
         //Hit a surface!
         // Gather nearby photons
-        float radius = scene.Radius / 1000.0f;
+        float radius = scene.Radius / 1000f;
         float footprint = hit.Distance * MathF.Tan(0.1f * MathF.PI / 180);
         radius = MathF.Min(footprint, radius);
 

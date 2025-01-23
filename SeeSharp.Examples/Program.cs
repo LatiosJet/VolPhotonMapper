@@ -10,9 +10,9 @@ SceneRegistry.AddSource("Data/Scenes");
 // Configure a benchmark to compare path tracing and VCM on the CornellBox
 // at 512x512 resolution. Display images in tev during rendering (localhost, default port)
 Benchmark benchmark = new(new VolPhotMapTest(), [
-    SceneRegistry.LoadScene("StillLife", maxDepth: 100),
+    SceneRegistry.LoadScene("StillLifeFloatingMedia", maxDepth: 1000),
     // SceneRegistry.LoadScene("CornellBox", maxDepth: 2).WithName("CornellBoxDirectIllum")
-], "Results/VolPhotonMapper", 512, 256, FrameBuffer.Flags.SendToTev);
+], "Results/VolPhotonMapper", 1600, 700, FrameBuffer.Flags.SendToTev);
 
 // Render the images
 benchmark.Run();
