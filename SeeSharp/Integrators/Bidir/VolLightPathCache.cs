@@ -359,7 +359,7 @@ public class VolLightPathCache {
 
         public override RgbColor OnContinue(ref Walk walk, Vector3 position, Vector3 outDirection, float pdfToAncestor, RgbColor throughput, HomogeneousVolume volume, int depth, int surfaceDepth, bool hitVolume) {
             walk.Payload.nextReversePdf = pdfToAncestor;
-            return hitVolume ? throughput * volume.EmittedRadiance(position, outDirection) : RgbColor.Black;
+            return hitVolume ? throughput * volume.SigmaA * volume.EmittedRadiance(position, outDirection) : RgbColor.Black;
         }
 
         public override void OnTerminate(ref Walk walk) {

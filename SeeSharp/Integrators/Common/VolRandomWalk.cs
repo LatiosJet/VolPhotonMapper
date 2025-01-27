@@ -124,6 +124,13 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
             return 1.0f;
     }
 
+    public float ComputeVolumeSurvivalProbability(int depth, HomogeneousVolume volume) {
+        if (depth > 1000)
+            return Math.Clamp(ApproxThroughput.Average * volume.SigmaS.Average / float.Max(0.01f, 1.0f-float.Abs(volume.G) ), 0.05f, 0.95f);
+        else
+            return 1.0f;
+    }
+
     RgbColor ContinueWalk(Ray ray, SurfacePoint previousPoint, float pdfDirection, RgbColor prefixWeight, int depth, int surfaceDepth, HomogeneousVolume volume, bool previouslyHitVolume) {
         RgbColor estimate = RgbColor.Black;
         Stack<HomogeneousVolume> volumeStack = new(); volumeStack.Push(volume);
@@ -134,7 +141,6 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                 estimate += Modifier?.OnInvalidHit(ref this, ray, pdfDirection, prefixWeight, depth, surfaceDepth) ?? RgbColor.Black;
                 break;
             }
-
             DistanceSample distSample = volume.SampleDistance(rng.NextFloat());
             if (hit.Distance > distSample.distance) {
                 Vector3 newPosition = ray.ComputePoint(distSample.distance);
@@ -143,9 +149,10 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                 ApproxThroughput *= distSample.weight;
                 prefixWeight *= distSample.weight;
 
-                if (!float.IsFinite(prefixWeight.Average) || prefixWeight == RgbColor.Black)
+                if (!float.IsFinite(prefixWeight.Average) || prefixWeight == RgbColor.Black) {
+                    //Logger.Log($"Light path was killed at depth {depth}");
                     break;
-
+                }
                 float jacobian = 1.0f;
                 //float jacobian = previouslyHitVolume ? 1.0f : SampleWarp.SurfaceAreaToSolidAngle(hit, previousPoint);
                 estimate += Modifier?.OnVolumeHit(ref this, newPosition, volume, pdfFromAncestor, prefixWeight, depth, surfaceDepth, jacobian) ?? RgbColor.Black;
@@ -155,10 +162,12 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                     break;
 
                 // Terminate with Russian roulette
-                float survivalProb = Modifier?.ComputeSurvivalProbability(ref this, hit, ray, prefixWeight, depth)
-                    ?? ComputeSurvivalProbability(depth);
+                float survivalProb = ComputeVolumeSurvivalProbability(depth, volume);
                 if (rng.NextFloat() > survivalProb)
                     break;
+
+                ApproxThroughput /= survivalProb;
+                prefixWeight /= survivalProb;
 
                 previouslyHitVolume = true;
                 var dirSample = volume.SampleDirection(-ray.Direction, rng.NextFloat2D());
@@ -169,8 +178,8 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                 if (dirSample.pdf == 0.0f || dirSample.weight == RgbColor.Black)
                     break;
 
-                ApproxThroughput *= dirSample.weight / survivalProb;
-                prefixWeight *= dirSample.weight / survivalProb;
+                ApproxThroughput *= dirSample.weight;
+                prefixWeight *= dirSample.weight;
 
                 // Continue the path with the next ray
                 depth++;
@@ -207,10 +216,13 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                     break;
 
                 // Terminate with Russian roulette
-                float survivalProb = Modifier?.ComputeSurvivalProbability(ref this, hit, ray, prefixWeight, depth)
+                float survivalProb = Modifier?.ComputeSurvivalProbability(ref this, hit, ray, prefixWeight, surfaceDepth)
                     ?? ComputeSurvivalProbability(depth);
                 if (rng.NextFloat() > survivalProb)
                     break;
+
+                prefixWeight /= survivalProb;
+                ApproxThroughput /= survivalProb;
 
                 // Sample the next direction and convert the reverse pdf
                 // var (pdfNext, pdfReverse, weight, direction) = SampleNextDirection(shader, prefixWeight, depth);
@@ -224,8 +236,8 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
                 if (dirSample.PdfForward == 0 || dirSample.Weight == RgbColor.Black)
                     break;
 
-                prefixWeight *= dirSample.Weight / survivalProb;
-                ApproxThroughput *= dirSample.ApproxReflectance / survivalProb;
+                prefixWeight *= dirSample.Weight;
+                ApproxThroughput *= dirSample.ApproxReflectance;
 
                 // Continue the path with the next ray
                 var crossedVolume = shader.material.InterfaceTo;

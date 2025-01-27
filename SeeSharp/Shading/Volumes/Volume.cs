@@ -7,7 +7,7 @@ public record struct DistanceSample {
     public float distance;
 
     /// <summary>
-    /// Weight assigned to the sample. Includes transmittance and pdf.
+    /// Weight assigned to the sample. It is equal to transmittance / pdf.
     /// </summary>
     public RgbColor weight;
 
@@ -53,7 +53,7 @@ public class HomogeneousVolume {
     public required RgbColor SigmaS { get; init; }
 
     /// <summary>
-    /// Isotropic radiance emission
+    /// Isotropic radiance emission. This is temporary. In order to get emitted radiance, use EmittedRadiance()
     /// </summary>
     public RgbColor EmissionRadiance = RgbColor.Black;
 
@@ -83,14 +83,15 @@ public class HomogeneousVolume {
     private float SigmaTHarmonicMean => 3.0f / ((1.0f / SigmaT.R) + (1.0f / SigmaT.G) + (1.0f / SigmaT.B));
 
     /// <summary>
-    /// How "specular" the transmission through the volume is. 1.0 is perfectly diffuse, 0.0 is perfectly specular. 1.0 for now since it's an isotropic medium.
+    /// How "specular" the transmission through the volume is. 1.0 is perfectly isotropic, 0.0 is perfectly "specular". Not a well-defined physical quantity.
     /// </summary>
-    public float GetRoughness() => 1.0f;
+    public float GetRoughness() => MathF.Abs(G);
 
     public float DistancePdf(float distance) => SigmaTHarmonicMean * MathF.Exp(-SigmaTHarmonicMean * distance);
     public float DistanceGreaterProb(float distance) => MathF.Exp(-SigmaTHarmonicMean * distance);
+    public float DistanceLeqProb(float distance) => 1 - DistanceGreaterProb(distance);
 
-    float PdfUniform = 1 / (4 * MathF.PI);
+    readonly float PdfUniform = 1 / (4 * MathF.PI);
     public RgbColor PhaseFunctionUniform => new RgbColor(PdfUniform);
 
     /// <summary>
@@ -119,7 +120,7 @@ public class HomogeneousVolume {
     public float DirectionPdf(Vector3 inDirection, Vector3 outDirection) => PhaseFunction(inDirection, outDirection).Average;
 
     /// <summary>
-    /// Samples distance given exponential distribution of the harmonic mean of the coefficients.
+    /// Samples distance given exponential distribution of the harmonic mean of the extinction coefficients' channels.
     /// </summary>
     /// <param name="primarySample"></param>
     /// <returns>INFINITE DISTANCE if volume is vacuum, else finite distance, pdf and probability of exceeding the distance.</returns>
@@ -135,9 +136,11 @@ public class HomogeneousVolume {
 
         float distance = -MathF.Log(1-primarySample)/SigmaTHarmonicMean;
         float pdf = DistancePdf(distance);
+        RgbColor transmittance = Transmittance(distance);
+        //float pdf = SigmaTHarmonicMean * (1 - primarySample);
         return new DistanceSample() {
             distance = distance,
-            weight = Transmittance(distance) / pdf,
+            weight = transmittance / pdf,
             pdf = pdf
         };
     }
@@ -180,23 +183,12 @@ public class HomogeneousVolume {
     }
 
     /// <summary>
-    /// Returns emitted radiance at the given point multiplied by absorption coefficient.
+    /// Returns emitted radiance at the given point.
     /// </summary>
     /// <param name="position"></param>
     /// <param name="outDirection"></param>
     /// <returns></returns>
-    public RgbColor EmittedRadiance(Vector3 position, Vector3 outDirection) => EmissionRadiance * SigmaA;
-
-    /// <summary>
-    /// Converts incoming irradiance in direction inDirection to outgoing radiance in direction outDirection.
-    /// Returns inRadiance * phaseFunction * sigmaS
-    /// </summary>
-    /// <param name="inRadiance">The incoming radiance</param>
-    /// <param name="position">Position in the volume the in-scattering event happened</param>
-    /// <param name="inDirection">The incoming direction (vector leaves the point)</param>
-    /// <param name="outDirection">The outgoing direction (vector leaves the point)</param>
-    /// <returns></returns>
-    public RgbColor InScatteredRadiance(RgbColor inRadiance, Vector3 position, Vector3 inDirection, Vector3 outDirection) => inRadiance * PhaseFunction(inDirection, outDirection) * SigmaS;
+    public RgbColor EmittedRadiance(Vector3 position, Vector3 outDirection) => EmissionRadiance;
 
     public bool IsVacuum() => SigmaT.Average <= 0.0f; //Negative values make no sense
 
