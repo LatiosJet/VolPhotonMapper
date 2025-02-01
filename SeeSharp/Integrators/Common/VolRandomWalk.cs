@@ -125,7 +125,7 @@ public ref struct VolRandomWalk<PayloadType> where PayloadType : new(){
     }
 
     public float ComputeVolumeSurvivalProbability(int depth, HomogeneousVolume volume) {
-        if (depth > 1000)
+        if (depth > 100)
             return Math.Clamp(ApproxThroughput.Average * volume.SigmaS.Average / float.Max(0.01f, 1.0f-float.Abs(volume.G) ), 0.05f, 0.95f);
         else
             return 1.0f;

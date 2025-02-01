@@ -1,0 +1,320 @@
+{
+    "materials": [{
+            "type": "generic",
+            "baseColor": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "roughness": 0.0,
+            "metallic": 0.0,
+            "specularTintStrength": 1.0,
+            "specularTransmittance": 1.0,
+            "name": "matLight",
+            "IOR": 1.0,
+            "emission": {
+                "type": "rgb",
+                "value": [80000.0, 80000.0, 80000.0]
+            }
+        }, {
+            "type": "generic",
+            "baseColor": {
+                "type": "rgb",
+                "value": [1.0, 1.0, 1.0]
+            },
+            "roughness": 0.0,
+            "metallic": 0.0,
+            "specularTintStrength": 1.0,
+            "specularTransmittance": 1.0,
+            "name": "matBall2",
+            "IOR": 1.5,
+            "volume": "medBall2",
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            }
+        }, {
+            "type": "generic",
+            "baseColor": {
+                "type": "rgb",
+                "value": [1.0, 1.0, 1.0]
+            },
+            "roughness": 0.0,
+            "metallic": 0.0,
+            "specularTintStrength": 1.0,
+            "specularTransmittance": 1.0,
+            "name": "matBall",
+            "IOR": 1.5,
+            "volume": "medBall",
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            }
+        }, {
+            "type": "generic",
+            "baseColor": {
+                "type": "rgb",
+                "value": [1.0, 1.0, 1.0]
+            },
+            "roughness": 0.0,
+            "metallic": 1.0,
+            "specularTintStrength": 1.0,
+            "specularTransmittance": 0.0,
+            "name": "matChrome",
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            }
+        }, {
+            "type": "generic",
+            "baseColor": {
+                "type": "rgb",
+                "value": [1.0, 1.0, 1.0]
+            },
+            "roughness": 0.0,
+            "metallic": 0.0,
+            "specularTintStrength": 1.0,
+            "specularTransmittance": 1.0,
+            "name": "matGlass",
+            "IOR": 1.3,
+            "volume": "medGlass",
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            }
+        }, {
+            "type": "generic",
+            "baseColor": {
+                "type": "rgb",
+                "value": [0.5879999995231628, 0.5879999995231628, 0.5879999995231628]
+            },
+            "roughness": 0.8999999761581421,
+            "anisotropic": 0.0,
+            "IOR": 1.5,
+            "metallic": 0.0,
+            "specularTintStrength": 0.0,
+            "specularTransmittance": 0.0,
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "emissionIsGlossy": false,
+            "emissionExponent": 20.0,
+            "name": "matGlobal"
+        }, {
+            "type": "generic",
+            "baseColor": {
+                "type": "rgb",
+                "value": [0.800000011920929, 0.800000011920929, 0.800000011920929]
+            },
+            "roughness": 0.5,
+            "anisotropic": 0.0,
+            "IOR": 1.4500000476837158,
+            "metallic": 0.0,
+            "specularTintStrength": 0.0,
+            "specularTransmittance": 0.0,
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "emissionIsGlossy": false,
+            "emissionExponent": 20.0,
+            "name": "Material"
+        }, {
+            "type": "generic",
+            "baseColor": {
+                "type": "rgb",
+                "value": [1.0, 1.0, 1.0]
+            },
+            "roughness": 1.0,
+            "anisotropic": 0.0,
+            "IOR": 1.4500000476837158,
+            "metallic": 0.0,
+            "specularTintStrength": 0.0,
+            "specularTransmittance": 0.0,
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "emissionIsGlossy": false,
+            "emissionExponent": 20.0,
+            "name": "Dots Stroke"
+        }, {
+            "type": "generic",
+            "baseColor": {
+                "type": "rgb",
+                "value": [0.9490000009536743, 0.9490000009536743, 0.09799999743700027]
+            },
+            "roughness": 0.8999999761581421,
+            "anisotropic": 0.0,
+            "IOR": 1.5,
+            "metallic": 0.0,
+            "specularTintStrength": 0.0,
+            "specularTransmittance": 0.0,
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "emissionIsGlossy": false,
+            "emissionExponent": 20.0,
+            "name": "diffuse_yellow"
+        }, {
+            "type": "generic",
+            "baseColor": {
+                "type": "rgb",
+                "value": [0.5879999995231628, 0.5879999995231628, 0.5879999995231628]
+            },
+            "roughness": 0.8999999761581421,
+            "anisotropic": 0.0,
+            "IOR": 1.5,
+            "metallic": 0.0,
+            "specularTintStrength": 0.0,
+            "specularTransmittance": 0.0,
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "emissionIsGlossy": false,
+            "emissionExponent": 20.0,
+            "name": "diffuse_white"
+        }, {
+            "type": "generic",
+            "baseColor": {
+                "type": "rgb",
+                "value": [0.09799999743700027, 0.09799999743700027, 0.9490000009536743]
+            },
+            "roughness": 0.8999999761581421,
+            "anisotropic": 0.0,
+            "IOR": 1.5,
+            "metallic": 0.0,
+            "specularTintStrength": 0.0,
+            "specularTransmittance": 0.0,
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "emissionIsGlossy": false,
+            "emissionExponent": 20.0,
+            "name": "diffuse_blue"
+        }
+    ],
+    "transforms": [{
+            "name": "camera",
+            "position": [0.18778350949287415, 2.637465238571167, 21.214519500732422],
+            "rotation": [0.8000567129076046, 362.00002100171946, 2.1633409507069213e-05],
+            "scale": [1.0, 1.0, 1.0]
+        }
+    ],
+    "cameras": [{
+            "fov": 22.895194130645738,
+            "transform": "camera",
+            "name": "default",
+            "type": "perspective"
+        }
+    ],
+    "objects": [{
+            "name": "mirrorballs.001",
+            "type": "ply",
+            "material": "matChrome",
+            "relativePath": "Meshes/mirrorballs.001.0.ply"
+        }, {
+            "name": "mirrorballs.002",
+            "type": "ply",
+            "material": "matGlass",
+            "relativePath": "Meshes/mirrorballs.002.0.ply"
+        }, {
+            "name": "mirrorballs.003",
+            "type": "ply",
+            "material": "diffuse_white",
+            "relativePath": "Meshes/mirrorballs.003.0.ply"
+        }, {
+            "name": "mirrorballs.004",
+            "type": "ply",
+            "material": "matLight",
+            "relativePath": "Meshes/mirrorballs.004.0.ply"
+        }, {
+            "name": "mirrorballs.005",
+            "type": "ply",
+            "material": "diffuse_blue",
+            "relativePath": "Meshes/mirrorballs.005.0.ply"
+        }, {
+            "name": "mirrorballs.006",
+            "type": "ply",
+            "material": "diffuse_yellow",
+            "relativePath": "Meshes/mirrorballs.006.0.ply"
+        }, {
+            "name": "mirrorballs.007",
+            "type": "ply",
+            "material": "matBall",
+            "relativePath": "Meshes/mirrorballs.007.0.ply"
+        }, {
+            "name": "mirrorballs.008",
+            "type": "ply",
+            "material": "matBall2",
+            "relativePath": "Meshes/mirrorballs.008.0.ply"
+        }
+    ],
+    "exposure": 0.0,
+    "volumes": [{
+            "absorption": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "scattering": {
+                "type": "rgb",
+                "value": [0.02, 0.015, 0.01]
+            },
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "g": 0.5,
+            "name": "medGlobal"
+        }, {
+            "absorption": {
+                "type": "rgb",
+                "value": [2.0, 0.1, 2.0]
+            },
+            "scattering": {
+                "type": "rgb",
+                "value": [0.04, 0.01, 0.04]
+            },
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "g": 0.0,
+            "name": "medGlass"
+        }, {
+            "absorption": {
+                "type": "rgb",
+                "value": [0.5, 6.0, 26.0]
+            },
+            "scattering": {
+                "type": "rgb",
+                "value": [10.0, 10.0, 10.0]
+            },
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "g": -0.9,
+            "name": "medBall2"
+        }, {
+            "absorption": {
+                "type": "rgb",
+                "value": [0.01, 1.0, 1.0]
+            },
+            "scattering": {
+                "type": "rgb",
+                "value": [6.0, 10.0, 10.0]
+            },
+            "emission": {
+                "type": "rgb",
+                "value": [0.0, 0.0, 0.0]
+            },
+            "g": -0.3,
+            "name": "medBall"
+        }
+    ],
+	"globalVolume": "medGlobal"
+}

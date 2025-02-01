@@ -29,7 +29,7 @@ public class VolumetricPhotonMapper : Integrator {
     /// <summary>
     /// Maximum number of ray marching steps done during integration of in-scattered and emission radiance along a ray.
     /// </summary>
-    public int MaxRayMarchingDepth = 100;
+    public int RayMarchingSamples = 5;
 
     /// <summary>
     /// Number of light paths in each iteration.
@@ -39,12 +39,12 @@ public class VolumetricPhotonMapper : Integrator {
     /// <summary>
     /// Coefficient of radius reduction for surface progressive photon mapping.
     /// </summary>
-    public float AlphaSur = 0.75f;
+    public float AlphaSur = 0.8f;
 
     /// <summary>
     /// Coefficient of radius reduction for volume progressive photon mapping.
     /// </summary>
-    public float AlphaVol = 0.75f;
+    public float AlphaVol = 0.8f;
 
 
     /// <summary>
@@ -201,16 +201,20 @@ public class VolumetricPhotonMapper : Integrator {
     /// The given indices must correspond to a photon corresponding to a volume hit. 
     /// </summary>
     /// <returns></returns>
-    RgbColor Merge3D(float radius, float dist, Vector3 hitPoint, Vector3 outDir, int pathIdx, int vertIdx) {
+    RgbColor Merge3D(float radius, float dist, Vector3 hitPoint, Vector3 outDir, int pathIdx, int vertIdx, HomogeneousVolume volume) {
+        var photon = lightPaths[pathIdx, vertIdx];
+        var photVolume = photon.Volume;
+        if (volume != photVolume) {
+            return RgbColor.Black;
+        }
+
         float distSqr = dist * dist;
         float radiusSqr = radius * radius;
 
         // Compute the contribution of the photon
-        var photon = lightPaths[pathIdx, vertIdx];
         var ancestor = lightPaths[pathIdx, vertIdx - 1];
         var dirToAncestor = Vector3.Normalize(ancestor.SurPoint.Position - photon.SurPoint.Position);
-        var volume = photon.Volume;
-        var photonContrib = photon.Weight * volume.PhaseFunction(dirToAncestor, outDir) / NumLightPaths;
+        var photonContrib = photon.Weight * photVolume.PhaseFunction(dirToAncestor, outDir) / NumLightPaths;
         if (!float.IsFinite(photonContrib.Average)) {
             //Logger.Log("Non-finite in-scattered photon contribution detected");
             return RgbColor.Black;
@@ -244,6 +248,7 @@ public class VolumetricPhotonMapper : Integrator {
     /// <param name="ray">Ray sampled from the camera</param>
     /// <param name="weight">Contribution of the ray to the image, multiplied with the radiance</param>
     /// <param name="rng">Random number generator</param>
+    /// <param name="iter">Iteration number</param>
     /// <returns>Pixel value estimate</returns>
     protected virtual RgbColor EstimatePixelValue(Vector2 pixel, Ray ray, RgbColor weight, uint iter, ref RNG rng) {
         RgbColor estimate = RgbColor.Black; //Radiance accumulator
@@ -274,20 +279,13 @@ public class VolumetricPhotonMapper : Integrator {
                 break;
             }
 
-            //Integrate in-scattered radiance and emitted radiance along the ray crossing the volume
-
-            float t = 0.0f; //Distance travelled through the volume
-            float rr_accumulator = 1.0f; //I don't know how to call this
-            for (int rmDepth=1; t < hit.Distance; rmDepth++) {
-                if (rmDepth >= MaxRayMarchingDepth) {
-                    Logger.Warning("MaxRayMarchingDepth reached. You might wanna raise this parameter.");
-                    return estimate;
-                }
+            RgbColor volumeContrib = RgbColor.Black;
+            uint reachedSurfaceCount = 0;
+            for (int i = 0; i<RayMarchingSamples; i++) {
                 var distSample = volume.SampleDistance(rng.NextFloat());
-                if (t + distSample.distance < hit.Distance) {
-                    rr_accumulator *= volume.DistanceLeqProb(hit.Distance - t);
-                    float mc_normalization = volume.DistanceLeqProb(distSample.distance) / (rr_accumulator * distSample.pdf); //I have the formula derivation in my notes somewhere. Believe we need this factor.
-                    Vector3 volPosition = ray.ComputePoint(t + distSample.distance);
+                if (distSample.distance < hit.Distance) {
+                    //Integrate in-scattered radiance and emitted radiance along the ray crossing the volume
+                    Vector3 volPosition = ray.ComputePoint(distSample.distance);
                     RgbColor emittedRadiance = volume.EmittedRadiance(volPosition, -ray.Direction);
                     RgbColor inScatteredRadiance = RgbColor.Black;
 
@@ -295,28 +293,24 @@ public class VolumetricPhotonMapper : Integrator {
 
                     volumePhotonMap.ForAllNearest(volPosition, MaxNumVolPhotons, MaxVolRadius, (position, idx, distance, numFound, maxDist) => {
                         float kernelRadius = numFound == MaxNumVolPhotons ? maxDist : MaxVolRadius;
-                        inScatteredRadiance += Merge3D(kernelRadius, distance, volPosition, -ray.Direction, photons[idx].PathIndex, photons[idx].VertexIndex);
+                        inScatteredRadiance += Merge3D(kernelRadius, distance, volPosition, -ray.Direction, photons[idx].PathIndex, photons[idx].VertexIndex, volume);
                     });
-                    return estimate + weight * distSample.weight * (volume.SigmaA * emittedRadiance + volume.SigmaS * inScatteredRadiance);
-                    
-                    //Combine everything as per heat transfer equation
-                    estimate += weight * volume.Transmittance(t + distSample.distance) * mc_normalization * (volume.SigmaA * emittedRadiance + volume.SigmaS * inScatteredRadiance);
-
-                    float survivalProb = ComputeVolumeSurvivalProbability(weight, rmDepth);
-                    if (rng.NextFloat() > survivalProb) {
-                        return estimate;
-                    }
-
-                    weight /= survivalProb;
+                    volumeContrib += distSample.weight * (volume.SigmaA * emittedRadiance + volume.SigmaS * inScatteredRadiance);
                 }
-                t += distSample.distance;
+                else {
+                    reachedSurfaceCount++;
+                }
             }
-
+            estimate += weight * volumeContrib / RayMarchingSamples;
+            if (reachedSurfaceCount == 0) {
+                break;
+            }
             //Now we reached a surface.
-            weight *= volume.Transmittance(hit.Distance) / volume.DistanceGreaterProb(hit.Distance);
-            //weight *= volume.Transmittance(hit.Distance);
+            weight *= volume.Transmittance(hit.Distance) / volume.DistanceGreaterProb(hit.Distance) * reachedSurfaceCount / RayMarchingSamples;
             SurfaceShader shader = new(hit, -ray.Direction, false);
-            if (shader.GetRoughness() < 0.5f || depth <= 4) { //If the surface is kinda-specular we perform path tracing
+
+            //pseudo-RR
+            if (rng.NextFloat() <= ComputeSurvivalProbability(weight, depth) && volume.IsVacuum() || shader.GetRoughness() < 0.2f) { //If the surface is kinda-specular we perform path tracing anyways
                 light = scene.QueryEmitter(hit);
                 if (light != null) {
                     float bsdf_mis_weight = 1.0f;
@@ -330,13 +324,7 @@ public class VolumetricPhotonMapper : Integrator {
                 if (depth + 1 > MaxDepth)
                     break;
 
-                //RR
-                float survivalProb = ComputeSurvivalProbability(weight, depth);
-                if (rng.NextFloat() > survivalProb) {
-                    break;
-                }
-
-                weight /= survivalProb;
+                //RR was moved s.t. instead of killing, it performs photon density estimation instead.
 
                 //NEE
                 if (volume.IsVacuum() && shader.GetRoughness() > 0.0f) {
